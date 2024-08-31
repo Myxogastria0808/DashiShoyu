@@ -1,0 +1,5 @@
+target
+/server/meili_data
+/server/db
+.env
+/server/src/bin/data
