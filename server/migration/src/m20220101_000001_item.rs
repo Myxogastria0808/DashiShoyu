@@ -40,7 +40,6 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Item::Color).string().not_null())
                     .col(ColumnDef::new(Item::Description).string().not_null())
                     .col(ColumnDef::new(Item::YearPurchased).integer())
-                    .col(ColumnDef::new(Item::IsDiscarded).boolean().not_null())
                     .col(ColumnDef::new(Item::Connector).json().not_null())
                     .col(ColumnDef::new(Item::CreatedAt).timestamp().not_null())
                     .col(ColumnDef::new(Item::UpdatedAt).timestamp().not_null())
@@ -72,7 +71,6 @@ enum Item {
     Color,
     Description,
     YearPurchased,
-    IsDiscarded,
     Connector,
     CreatedAt,
     UpdatedAt,
