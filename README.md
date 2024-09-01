@@ -1,5 +1,18 @@
 # だし醤油
 
+## 構成
+
+### Frontend
+
+- Framework: Next.js
+
+### Backend
+
+- Web API: axum
+- ORM: SeaORM
+- Database: PostgreSQL
+- Search Engine: MeiliSearch
+
 ## Setup
 
 1. Nix のインストール
