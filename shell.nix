@@ -9,6 +9,9 @@ in pkgs.mkShell {
     openssl
     jq
     sea-orm-cli
+    #next.js
+    nodejs_21
+    corepack_21
 
     (rustChannelOf {
       rustToolchain = ./server/rust-toolchain.toml;
