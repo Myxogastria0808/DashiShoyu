@@ -19,7 +19,6 @@ struct ItemRawData {
     description: Option<String>,
     #[serde(deserialize_with = "csv::invalid_option")]
     year_purchased: Option<i32>,
-    is_discarded: String,
     #[serde(deserialize_with = "csv::invalid_option")]
     connector_1: Option<String>,
     #[serde(deserialize_with = "csv::invalid_option")]
@@ -48,7 +47,6 @@ struct ItemData {
     color: String,
     description: String,
     year_purchased: Option<i32>,
-    is_discarded: bool,
     //serde_json::Value
     connector: Vec<String>,
 }
@@ -68,7 +66,6 @@ struct ItemMeilisearchData {
     color: String,
     description: String,
     year_purchased: Option<i32>,
-    is_discarded: bool,
     connector: JsonValue,
     created_at: NaiveDateTime,
     updated_at: NaiveDateTime,
@@ -177,13 +174,6 @@ async fn convert_to_item_data(data: Vec<ItemRawData>) -> Result<Vec<ItemData>, B
                 None => "".to_string(),
             },
             year_purchased: item.year_purchased,
-            is_discarded: match item.is_discarded.as_str() {
-                "TRUE" => true,
-                "FALSE" => false,
-                _ => {
-                    panic!("Invalid is_discarded: {}", item.is_discarded)
-                }
-            },
             connector: vec![
                 match item.connector_1 {
                     Some(content) => content,
@@ -239,7 +229,6 @@ async fn insert_item_data_to_db(data: Vec<ItemData>) -> Result<(), DbErr> {
             color: Set(item.color.clone()),
             description: Set(item.description.clone()),
             year_purchased: Set(item.year_purchased),
-            is_discarded: Set(item.is_discarded),
             connector: Set(json!(item.connector.clone())),
             created_at: Set(Utc::now().naive_local()),
             updated_at: Set(Utc::now().naive_local()),
@@ -295,7 +284,6 @@ async fn insert_item_data_to_meilisearch() -> Result<(), DbErr> {
             color: item.color,
             description: item.description,
             year_purchased: item.year_purchased,
-            is_discarded: item.is_discarded,
             connector: item.connector,
             created_at: item.created_at,
             updated_at: item.updated_at,
