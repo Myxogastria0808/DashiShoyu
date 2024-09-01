@@ -4,7 +4,10 @@
 
 ### Frontend
 
-- Framework: Next.js
+- Framework: Next.js 14
+- CSS in JS: styled-components
+- QR: next-qrcode
+- Barcode: react-jsbarcode
 
 ### Backend
 
@@ -12,6 +15,18 @@
 - ORM: SeaORM
 - Database: PostgreSQL
 - Search Engine: MeiliSearch
+
+### Handler の命名規則
+
+接尾辞にメソッドを明記すること
+
+例: POST の handler の場合
+
+```rust
+async fn register_item_post() {
+    //処理
+}
+```
 
 ## Setup
 
@@ -86,9 +101,28 @@ curl   -X GET 'http://localhost:7700/keys'   -H 'Authorization: Bearer master-ke
 
 `server/.env`の`ADMIN_API_KEY`の値として、Default Admin API Key の値を書く
 
-## マイグレーションなど
+6. migrate する
 
-1. migrate する
+```sh
+DATABASE_URL="<DATABASE_URL>" sea-orm-cli migrate refresh
+```
+
+コマンドの例
+
+```sh
+DATABASE_URL="postgres://username:password@localhost:5432/db_name" sea-orm-cli migrate refresh
+```
+
+## エンティティを生成する
+
+1. Docker の起動
+
+```sh
+#serverディレクトリ
+docker-compose up -d
+```
+
+1. マイグレーションをする
 
 ```sh
 DATABASE_URL="<DATABASE_URL>" sea-orm-cli migrate refresh
@@ -162,7 +196,6 @@ erDiagram
         String Color "enum {Red, Orange, Brown, SkyBlue、Blue, Green, Yellow, Purple, Pink} でApp側でバリデーション"
         String Description　"補足説明 (空の文字列を許容する)"
         Option_i32 YearPurchased "購入年度"
-        boolean IsDiscarded "true: 廃棄された物品, false: 現役の物品"
         Json Connector　"e.g. ['USB Type-C', 'USB Type-A', '', '', '', '']"
         datetime CreatedAt "登録したときの日時"
         datetime UpdatedAt "更新したときの日時"
@@ -191,7 +224,6 @@ erDiagram
         String Color "enum {Red, Orange, Brown, SkyBlue、Blue, Green, Yellow, Purple, Pink} でApp側でバリデーション"
         String Description　"補足説明 (空の文字列を許容する)"
         Option_i32 YearPurchased "購入年度"
-        boolean IsDiscarded "true: 廃棄された物品, false: 現役の物品"
         Json Connector　"e.g. ['USB Type-C', 'USB Type-A', '', '', '', '']"
         datetime CreatedAt "登録したときの日時"
         datetime UpdatedAt "更新したときの日時"
