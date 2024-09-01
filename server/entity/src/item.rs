@@ -20,7 +20,6 @@ pub struct Model {
     pub color: String,
     pub description: String,
     pub year_purchased: Option<i32>,
-    pub is_discarded: bool,
     pub connector: Json,
     pub created_at: DateTime,
     pub updated_at: DateTime,
