@@ -1,5 +1,5 @@
 use ::entity::item::{self, Entity as Item};
-use chrono::Utc;
+use chrono::{NaiveDateTime, Utc};
 use csv::Error;
 use sea_orm::*;
 use serde::{Deserialize, Serialize};
@@ -42,32 +42,50 @@ struct ItemData {
     name: String,
     product_number: String,
     photo_url: String,
-    //enum Record
+    //Record
     record: String,
-    //enum Color
+    //Color
     color: String,
     description: String,
     year_purchased: Option<i32>,
     is_discarded: bool,
+    //serde_json::Value
     connector: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct ItemMeilisearchData {
+    id: i32,
+    visible_id: String,
+    parent_id: i32,
+    parent_visible_id: String,
+    grand_parent_id: i32,
+    grand_parent_visible_id: String,
+    name: String,
+    product_number: String,
+    photo_url: String,
+    record: String,
+    color: String,
+    description: String,
+    year_purchased: Option<i32>,
+    is_discarded: bool,
+    connector: JsonValue,
+    created_at: NaiveDateTime,
+    updated_at: NaiveDateTime,
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    // insret item data
     match make_item_data().await {
-        Ok(data) => {
-            println!("{:?}", data);
-            match insert_item_data(data).await {
-                Ok(_) => {
-                    println!("Success!");
-                }
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    process::exit(1);
-                }
+        Ok(data) => match insert_item_data(data).await {
+            Ok(_) => {
+                println!("\nSuccess!");
             }
-        }
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                process::exit(1);
+            }
+        },
         Err(e) => {
             eprintln!("Error: {}", e);
             process::exit(1);
@@ -202,7 +220,7 @@ async fn make_item_data() -> Result<Vec<ItemData>, Box<Error>> {
     Ok(data)
 }
 
-async fn insert_item_data(data: Vec<ItemData>) -> Result<(), DbErr> {
+async fn insert_item_data_to_db(data: Vec<ItemData>) -> Result<(), DbErr> {
     //connect db
     let db: DatabaseConnection = server::connect_db().await?;
     let mut all_data: Vec<(String, i32)> = Vec::new();
@@ -252,5 +270,53 @@ async fn insert_item_data(data: Vec<ItemData>) -> Result<(), DbErr> {
         });
         item.update(&db).await?;
     }
+    println!("Insert data to DB was completed!");
+    Ok(())
+}
+
+async fn insert_item_data_to_meilisearch() -> Result<(), DbErr> {
+    //connect db
+    let db: DatabaseConnection = server::connect_db().await?;
+    //get all db data
+    let all_data = Item::find().all(&db).await?;
+    let mut result_vec: Vec<ItemMeilisearchData> = Vec::new();
+    for item in all_data {
+        let item = ItemMeilisearchData {
+            id: item.id,
+            visible_id: item.visible_id,
+            parent_id: item.parent_id,
+            parent_visible_id: item.parent_visible_id,
+            grand_parent_id: item.grand_parent_id,
+            grand_parent_visible_id: item.grand_parent_visible_id,
+            name: item.name,
+            product_number: item.product_number,
+            photo_url: item.photo_url,
+            record: item.record,
+            color: item.color,
+            description: item.description,
+            year_purchased: item.year_purchased,
+            is_discarded: item.is_discarded,
+            connector: item.connector,
+            created_at: item.created_at,
+            updated_at: item.updated_at,
+        };
+        result_vec.push(item);
+    }
+    //connect meilisearch
+    let client = server::connect_meilisearch().await;
+    let item_meilisearch = client
+        .index("item")
+        .add_documents(&result_vec, Some("id"))
+        .await
+        .unwrap();
+    println!("\n[Meiliserch Result]");
+    println!("{:#?}", item_meilisearch);
+    println!("\nInsert data to MeiliSearch was completed!");
+    Ok(())
+}
+
+async fn insert_item_data(data: Vec<ItemData>) -> Result<(), DbErr> {
+    insert_item_data_to_db(data).await?;
+    insert_item_data_to_meilisearch().await?;
     Ok(())
 }

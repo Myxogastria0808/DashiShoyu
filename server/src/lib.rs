@@ -9,3 +9,5 @@ pub use utils::r2::get_r2_url;
 pub use utils::r2::upload_image;
 //image
 pub use utils::image::convert_to_webp;
+//meilisearch
+pub use utils::meilisearch::connect_meilisearch;

@@ -26,3 +26,5 @@ cloudflare-r2-rs = "0.6.4"
 #image
 image = "0.25.2"
 webp = "0.3.0"
+#meilisearch
+meilisearch-sdk = "0.27.1"
