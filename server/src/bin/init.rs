@@ -1,5 +1,5 @@
 use ::entity::item::{self, Entity as Item};
-use chrono::{NaiveDateTime, Utc};
+use chrono::Utc;
 use csv::Error;
 use sea_orm::*;
 use serde::{Deserialize, Serialize};
@@ -7,7 +7,7 @@ use serde_json::json;
 use std::{collections::HashMap, env, process};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct ItemRawData {
+struct CsvItemData {
     visible_id: String,
     parent_visible_id: String,
     name: String,
@@ -51,26 +51,6 @@ struct ItemData {
     connector: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct ItemMeilisearchData {
-    id: i32,
-    visible_id: String,
-    parent_id: i32,
-    parent_visible_id: String,
-    grand_parent_id: i32,
-    grand_parent_visible_id: String,
-    name: String,
-    product_number: String,
-    photo_url: String,
-    record: String,
-    color: String,
-    description: String,
-    year_purchased: Option<i32>,
-    connector: JsonValue,
-    created_at: NaiveDateTime,
-    updated_at: NaiveDateTime,
-}
-
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     match make_item_data().await {
@@ -90,19 +70,19 @@ async fn main() {
     }
 }
 
-async fn read_item_raw_data_csv() -> Result<Vec<ItemRawData>, Box<Error>> {
+async fn read_item_raw_data_csv() -> Result<Vec<CsvItemData>, Box<Error>> {
     let file_path = env::args_os()
         .nth(1)
         .expect("Give the relative path of the csv file as an argument.");
     let mut rdr = csv::Reader::from_path(file_path)?;
-    let mut result_vec: Vec<ItemRawData> = Vec::new();
+    let mut result_vec: Vec<CsvItemData> = Vec::new();
     for record in rdr.deserialize() {
         result_vec.push(record?);
     }
     Ok(result_vec)
 }
 
-async fn convert_to_item_data(data: Vec<ItemRawData>) -> Result<Vec<ItemData>, Box<Error>> {
+async fn convert_to_item_data(data: Vec<CsvItemData>) -> Result<Vec<ItemData>, Box<Error>> {
     //upload image
     // get r2_manager
     let r2_manager = server::connect_r2().await;
@@ -268,9 +248,9 @@ async fn insert_item_data_to_meilisearch() -> Result<(), DbErr> {
     let db: DatabaseConnection = server::connect_db().await?;
     //get all db data
     let all_data = Item::find().all(&db).await?;
-    let mut result_vec: Vec<ItemMeilisearchData> = Vec::new();
+    let mut result_vec: Vec<server::MeilisearchItemData> = Vec::new();
     for item in all_data {
-        let item = ItemMeilisearchData {
+        let item = server::MeilisearchItemData {
             id: item.id,
             visible_id: item.visible_id,
             parent_id: item.parent_id,

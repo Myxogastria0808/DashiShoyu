@@ -1,10 +1,13 @@
-use ::entity::{item, item::Entity as Item};
-use axum::{routing::get, Extension, Router};
+use crate::routes::item_routes;
+use axum::{Extension, Router};
 use cloudflare_r2_rs::r2;
 use dotenvy::dotenv;
 use once_cell::sync::OnceCell;
 use sea_orm::*;
 use std::env;
+
+mod handlers;
+mod routes;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -21,7 +24,7 @@ async fn api() -> Result<(), DbErr> {
     let r2_url: String = server::get_r2_url().await;
     //Router
     let app = Router::new()
-        .route("/", get(sample_handler))
+        .merge(item_routes::item_routes().await)
         .layer(Extension(db))
         .layer(Extension(r2_manager))
         .layer(Extension(r2_url));
@@ -35,9 +38,4 @@ async fn api() -> Result<(), DbErr> {
     println!("listening on http://{}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.unwrap();
     Ok(())
-}
-
-//Handler
-async fn sample_handler() -> String {
-    "Hello, World".to_string()
 }

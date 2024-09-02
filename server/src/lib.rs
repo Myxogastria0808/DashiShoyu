@@ -11,3 +11,11 @@ pub use utils::r2::upload_image;
 pub use utils::image::convert_to_webp;
 //meilisearch
 pub use utils::meilisearch::connect_meilisearch;
+
+//model
+mod models;
+pub use models::item_models::MeilisearchItemData;
+
+//error
+mod error;
+pub use error::handler_error::AppError;
