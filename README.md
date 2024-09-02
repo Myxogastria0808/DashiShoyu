@@ -191,7 +191,7 @@ erDiagram
         String GrandParentVisibleId "実際の親の親物品ID"
         String Name
         String ProductNumber "型番 (わからない or 存在しない場合は、空の文字列)"
-        String PhotoUrl UK "Cloudflare R2に画像を格納する"
+        String PhotoUrl UK "Cloudflare R2に画像を格納する ファイル名は、{VisibleId},webp"
         String Record "enum {QR, Barcode, Nothing}でApp側でバリデーション"
         String Color "enum {Red, Orange, Brown, SkyBlue、Blue, Green, Yellow, Purple, Pink} でApp側でバリデーション"
         String Description　"補足説明 (空の文字列を許容する)"
@@ -199,6 +199,31 @@ erDiagram
         Json Connector　"e.g. ['USB Type-C', 'USB Type-A', '', '', '', '']"
         datetime CreatedAt "登録したときの日時"
         datetime UpdatedAt "更新したときの日時"
+    }
+
+    Object }o--o| Tag : tag
+    Tag }o--o| Category : category
+    Object {
+        i32 Id PK, UK "autoincrement"
+        String Name
+        String PhotoUrl UK "Cloudflare R2に画像を格納する ファイル名は object-{id}.{各拡張子 MimeTypesから推測}"
+        String MimeTypes
+        String License
+        Tag Tag "Tag Tableにリレーションを張っている"
+        String Description "補足説明 (空の文字列を許容する)"
+        datetime CreatedAt "登録したときの日時"
+        datetime UpdatedAt "更新したときの日時"
+    }
+
+    Tag {
+        i32 id PK, UK "autoincrement"
+        String Name
+        Category Category "Tag Tableにリレーションを貼っている"
+    }
+
+    Category {
+        i32 id PK, UK "autoincrement"
+        String Name
     }
 ```
 
@@ -242,5 +267,30 @@ erDiagram
     User {
         i32 id PK, UK "autoincrement"
         String uid UK
+    }
+
+    Object }o--o| Tag : tag
+    Tag }o--o| Category : category
+    Object {
+        i32 Id PK, UK "autoincrement"
+        String Name
+        String PhotoUrl UK "Cloudflare R2に画像を格納する ファイル名は object-{id}.{各拡張子 MimeTypesから推測}"
+        String MimeTypes
+        String License
+        Tag Tag "Tag Tableにリレーションを張っている"
+        String Description "補足説明 (空の文字列を許容する)"
+        datetime CreatedAt "登録したときの日時"
+        datetime UpdatedAt "更新したときの日時"
+    }
+
+    Tag {
+        i32 id PK, UK "autoincrement"
+        String Name
+        Category Category "Tag Tableにリレーションを貼っている"
+    }
+
+    Category {
+        i32 id PK, UK "autoincrement"
+        String Name
     }
 ```
