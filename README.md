@@ -189,7 +189,7 @@ cargo run --bin init ./src/bin/data/sample.csv
 
 ```mermaid
 erDiagram
-    Item |o--|| VisibleId : "visible_id color"
+    Item |o--|| Label : "visible_id color"
     Item {
         i32 Id PK "autoincrement"
         VisibleId VisibleId UK "VisibleIdテーブルとリレーションを貼っている"
@@ -207,7 +207,7 @@ erDiagram
         datetime CreatedAt "登録したときの日時"
         datetime UpdatedAt "更新したときの日時"
     }
-    VisibleId {
+    Label {
         i32 Id PK "autoincrement"
         String VisibleId UK "実際の物品ID"
         Color Color "enum {Red, Orange, Brown, SkyBlue、Blue, Green, Yellow, Purple, Pink} (ActiveEnum)"
@@ -226,13 +226,11 @@ erDiagram
         datetime CreatedAt "登録したときの日時"
         datetime UpdatedAt "更新したときの日時"
     }
-
     Tag {
         i32 id PK "autoincrement"
         String Name
         Category Category "Tag Tableにリレーションを貼っている"
     }
-
     Category {
         i32 id PK "autoincrement"
         String Name
@@ -247,7 +245,7 @@ erDiagram
 erDiagram
     Item ||--o{ Transaction : transaction
     Transaction }o--|{ User : user
-    Item |o--|| VisibleId : "visible_id color"
+    Item |o--|| Label : "visible_id color"
     Item {
         i32 Id PK, UK "autoincrement"
         VisibleId VisibleId UK "VisibleIdテーブルとリレーションを貼っている"
@@ -265,13 +263,11 @@ erDiagram
         datetime CreatedAt "登録したときの日時"
         datetime UpdatedAt "更新したときの日時"
     }
-
-    VisibleId {
+    Label {
         i32 Id PK "autoincrement"
         String VisibleId UK "実際の物品ID"
         Color Color "enum {Red, Orange, Brown, SkyBlue、Blue, Green, Yellow, Purple, Pink} (ActiveEnum)"
     }
-
     Transaction {
         i32 Id PK, UK "autoincrement"
         USER borrow_user "USER table"
@@ -280,7 +276,6 @@ erDiagram
         datetime due_date
         String state "enum{　'Pending', 'Lending', 'Completed', 'Delaying'　}でApp側でバリデーション"
     }
-
     User {
         i32 id PK, UK "autoincrement"
         String uid UK
