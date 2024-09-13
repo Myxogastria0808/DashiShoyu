@@ -203,7 +203,7 @@ erDiagram
         Record Record "enum {QR, Barcode, Nothing} (ActiveEnum)"
         String Description　"補足説明 (空の文字列を許容する)"
         Option_i32 YearPurchased "購入年度"
-        Json Connector　"e.g. ['USB Type-C', 'USB Type-A', '', '', '', '']"
+        Json Connector　"e.g. ['USB Type-C', 'USB Type-A']　(可変の配列)"
         datetime CreatedAt "登録したときの日時"
         datetime UpdatedAt "更新したときの日時"
     }
@@ -261,7 +261,7 @@ erDiagram
         Record Record "enum {QR, Barcode, Nothing} (ActiveEnum)"
         String Description　"補足説明 (空の文字列を許容する)"
         Option_i32 YearPurchased "購入年度"
-        Json Connector　"e.g. ['USB Type-C', 'USB Type-A', '', '', '', '']"
+        Json Connector　"e.g. ['USB Type-C', 'USB Type-A'] (可変の配列)"
         datetime CreatedAt "登録したときの日時"
         datetime UpdatedAt "更新したときの日時"
     }
