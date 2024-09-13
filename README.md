@@ -6,7 +6,7 @@
 
 - Framework: Next.js 14
 - CSS in JS: css modules
-- HTTP Client: ky (fetch API を使いことを禁ずる)
+- HTTP Client: ky
 - QR: next-qrcode
 - Barcode: react-jsbarcode
 - PDF: react-pdf
