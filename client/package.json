@@ -6,15 +6,21 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "tcm": "tcm -p src/**/*.module.css -W"
   },
   "dependencies": {
+    "@hookform/resolvers": "^3.9.0",
+    "@react-pdf/renderer": "^3.4.4",
+    "ky": "^1.7.2",
     "next": "14.2.7",
     "next-qrcode": "^2.5.1",
     "react": "^18",
     "react-dom": "^18",
+    "react-hook-form": "^7.53.0",
     "react-jsbarcode": "^1.0.1",
-    "styled-components": "^6.1.13"
+    "typed-css-modules": "^0.9.1",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^20",

@@ -1,0 +1,33 @@
+[package]
+name = "server"
+version = "0.0.1"
+edition = "2021"
+
+[workspace]
+members = [".", "migration", "entity"]
+
+[dependencies]
+#axum
+axum = {version = "0.7.5", features = ["multipart", "macros"] }
+tokio = { version = "1.39.2", features = ["full"] }
+tower-http = { version = "0.5.2", features = ["cors"] }
+#.env
+dotenvy = "0.15.7"
+once_cell = "1.19.0"
+#seaorm
+entity = { path = "entity" }
+migration = { path = "migration" }
+sea-orm = { version = "1.0.0", features = [ "sqlx-postgres", "runtime-tokio-native-tls", "macros" ] }
+chrono = "0.4.38"
+serde_json = "1.0.127"
+#csv
+csv = "1.3.0"
+serde = { version="1.0.209", features=["derive"] }
+#cloudflare
+cloudflare-r2-rs = "0.6.4"
+#image
+image = "0.25.2"
+webp = "0.3.0"
+#meilisearch
+meilisearch-sdk = "0.27.1"
+anyhow = "1.0.86"

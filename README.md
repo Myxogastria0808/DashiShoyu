@@ -5,9 +5,11 @@
 ### Frontend
 
 - Framework: Next.js 14
-- CSS in JS: styled-components
+- CSS in JS: css modules
+- HTTP Client: ky (fetch API を使いことを禁ずる)
 - QR: next-qrcode
 - Barcode: react-jsbarcode
+- PDF: react-pdf
 
 ### Backend
 
@@ -16,7 +18,12 @@
 - Database: PostgreSQL
 - Search Engine: MeiliSearch
 
-### Handler の命名規則
+### 画像専用の Backend
+
+- Web API: Hono
+- Image Storage: Cloudflare R2
+
+#### Handler の命名規則
 
 接尾辞にメソッドを明記すること
 
@@ -182,23 +189,28 @@ cargo run --bin init ./src/bin/data/sample.csv
 
 ```mermaid
 erDiagram
+    Item |o--|| VisibleId : "visible_id color"
     Item {
-        i32 Id PK, UK "autoincrement"
-        String VisibleId UK "実際の物品ID"
+        i32 Id PK "autoincrement"
+        VisibleId VisibleId UK "VisibleIdテーブルとリレーションを貼っている"
         i32 ParentId "DB上の親物品ID"
         String ParentVisibleId "実際の親物品ID"
         i32 GrandParentId "DB上の親の親物品ID"
         String GrandParentVisibleId "実際の親の親物品ID"
         String Name
         String ProductNumber "型番 (わからない or 存在しない場合は、空の文字列)"
-        String PhotoUrl UK "Cloudflare R2に画像を格納する ファイル名は、{VisibleId},webp"
-        String Record "enum {QR, Barcode, Nothing}でApp側でバリデーション"
-        String Color "enum {Red, Orange, Brown, SkyBlue、Blue, Green, Yellow, Purple, Pink} でApp側でバリデーション"
+        String PhotoUrl UK "Cloudflare R2に画像を格納する ファイル名は、{Id}.webp"
+        Record Record "enum {QR, Barcode, Nothing} (ActiveEnum)"
         String Description　"補足説明 (空の文字列を許容する)"
         Option_i32 YearPurchased "購入年度"
         Json Connector　"e.g. ['USB Type-C', 'USB Type-A', '', '', '', '']"
         datetime CreatedAt "登録したときの日時"
         datetime UpdatedAt "更新したときの日時"
+    }
+    VisibleId {
+        i32 Id PK "autoincrement"
+        String VisibleId UK "実際の物品ID"
+        Color Color "enum {Red, Orange, Brown, SkyBlue、Blue, Green, Yellow, Purple, Pink} (ActiveEnum)"
     }
 
     Object }o--o| Tag : tag
@@ -206,7 +218,7 @@ erDiagram
     Object {
         i32 Id PK, UK "autoincrement"
         String Name
-        String PhotoUrl UK "Cloudflare R2に画像を格納する ファイル名は object-{id}.{各拡張子 MimeTypesから推測}"
+        String PhotoUrl UK "Cloudflare R2に画像を格納する ファイル名は obj-{Id}.{各拡張子 MimeTypesから推測}"
         String MimeTypes
         String License
         Tag Tag "Tag Tableにリレーションを張っている"
@@ -216,13 +228,13 @@ erDiagram
     }
 
     Tag {
-        i32 id PK, UK "autoincrement"
+        i32 id PK "autoincrement"
         String Name
         Category Category "Tag Tableにリレーションを貼っている"
     }
 
     Category {
-        i32 id PK, UK "autoincrement"
+        i32 id PK "autoincrement"
         String Name
     }
 ```
@@ -235,6 +247,7 @@ erDiagram
 erDiagram
     Item ||--o{ Transaction : transaction
     Transaction }o--|{ User : user
+    Item |o--|| VisibleId : "visible_id color"
     Item {
         i32 Id PK, UK "autoincrement"
         String VisibleId UK "実際の物品ID"
@@ -244,15 +257,20 @@ erDiagram
         String GrandParentVisibleId "実際の親の親物品ID"
         String Name
         String ProductNumber "型番 (わからない or 存在しない場合は、空の文字列)"
-        String PhotoUrl UK "Cloudflare R2に画像を格納する"
-        String Record "enum {QR, Barcode, Nothing}でApp側でバリデーション"
-        String Color "enum {Red, Orange, Brown, SkyBlue、Blue, Green, Yellow, Purple, Pink} でApp側でバリデーション"
+        String PhotoUrl UK "Cloudflare R2に画像を格納する ファイル名は、{Id}.webp"
+        Record Record "enum {QR, Barcode, Nothing} (ActiveEnum)"
+        Color Color "enum {Red, Orange, Brown, SkyBlue、Blue, Green, Yellow, Purple, Pink} (ActiveEnum)"
         String Description　"補足説明 (空の文字列を許容する)"
         Option_i32 YearPurchased "購入年度"
         Json Connector　"e.g. ['USB Type-C', 'USB Type-A', '', '', '', '']"
         datetime CreatedAt "登録したときの日時"
         datetime UpdatedAt "更新したときの日時"
-        Transaction Transaction "貸し出し記録 Transaction Tableにリレーションを貼っている"
+    }
+
+        VisibleId {
+        i32 Id PK "autoincrement"
+        String VisibleId UK "実際の物品ID"
+        Color Color "enum {Red, Orange, Brown, SkyBlue、Blue, Green, Yellow, Purple, Pink} (ActiveEnum)"
     }
 
     Transaction {
@@ -274,7 +292,7 @@ erDiagram
     Object {
         i32 Id PK, UK "autoincrement"
         String Name
-        String PhotoUrl UK "Cloudflare R2に画像を格納する ファイル名は object-{id}.{各拡張子 MimeTypesから推測}"
+        String PhotoUrl UK "Cloudflare R2に画像を格納する ファイル名は obj-{Id}.{各拡張子 MimeTypesから推測}"
         String MimeTypes
         String License
         Tag Tag "Tag Tableにリレーションを張っている"

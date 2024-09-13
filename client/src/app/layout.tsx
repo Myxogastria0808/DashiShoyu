@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Noto_Serif_JP } from "next/font/google";
+import "./globals.css";
 
 const font = Noto_Serif_JP({
   weight: ["400"],

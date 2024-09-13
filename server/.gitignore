@@ -1,6 +1,0 @@
-/target
-/migration/target
-/meili_data
-/db
-.env
-/src/bin/data
