@@ -250,7 +250,7 @@ erDiagram
     Item |o--|| VisibleId : "visible_id color"
     Item {
         i32 Id PK, UK "autoincrement"
-        String VisibleId UK "実際の物品ID"
+        VisibleId VisibleId UK "VisibleIdテーブルとリレーションを貼っている"
         i32 ParentId "DB上の親物品ID"
         String ParentVisibleId "実際の親物品ID"
         i32 GrandParentId "DB上の親の親物品ID"
@@ -259,7 +259,6 @@ erDiagram
         String ProductNumber "型番 (わからない or 存在しない場合は、空の文字列)"
         String PhotoUrl UK "Cloudflare R2に画像を格納する ファイル名は、{Id}.webp"
         Record Record "enum {QR, Barcode, Nothing} (ActiveEnum)"
-        Color Color "enum {Red, Orange, Brown, SkyBlue、Blue, Green, Yellow, Purple, Pink} (ActiveEnum)"
         String Description　"補足説明 (空の文字列を許容する)"
         Option_i32 YearPurchased "購入年度"
         Json Connector　"e.g. ['USB Type-C', 'USB Type-A', '', '', '', '']"
@@ -267,7 +266,7 @@ erDiagram
         datetime UpdatedAt "更新したときの日時"
     }
 
-        VisibleId {
+    VisibleId {
         i32 Id PK "autoincrement"
         String VisibleId UK "実際の物品ID"
         Color Color "enum {Red, Orange, Brown, SkyBlue、Blue, Green, Yellow, Purple, Pink} (ActiveEnum)"
