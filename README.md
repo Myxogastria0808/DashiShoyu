@@ -5,7 +5,7 @@
 ### Frontend
 
 - Framework: Next.js 14
-- CSS in JS: css modules
+- CSS: css modules
 - HTTP Client: ky
 - QR: next-qrcode
 - Barcode: react-jsbarcode
