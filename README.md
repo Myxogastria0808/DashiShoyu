@@ -192,7 +192,7 @@ erDiagram
     Item |o--|| Label : "visible_id color"
     Item {
         i32 Id PK "autoincrement"
-        VisibleId VisibleId UK "VisibleIdテーブルとリレーションを貼っている"
+        Label LabelId FK, UK "Label Tableとリレーションを貼っている"
         i32 ParentId "DB上の親物品ID"
         String ParentVisibleId "実際の親物品ID"
         i32 GrandParentId "DB上の親の親物品ID"
@@ -248,7 +248,7 @@ erDiagram
     Item |o--|| Label : "visible_id color"
     Item {
         i32 Id PK, UK "autoincrement"
-        VisibleId VisibleId UK "VisibleIdテーブルとリレーションを貼っている"
+        Label LabelId FK, UK "Label Tableとリレーションを貼っている"
         i32 ParentId "DB上の親物品ID"
         String ParentVisibleId "実際の親物品ID"
         i32 GrandParentId "DB上の親の親物品ID"
