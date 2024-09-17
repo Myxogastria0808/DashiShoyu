@@ -23,6 +23,8 @@ async fn api() -> Result<(), DbErr> {
     let r2_manager: r2::R2Manager = server::connect_r2().await;
     // r2 URL
     let r2_url: String = server::get_r2_url().await;
+    // MeiliSearch
+    let meilisearch_client: meilisearch_sdk::client::Client = server::connect_meilisearch().await;
     //CORS
     let cors = CorsLayer::new()
         .allow_methods([Method::POST, Method::GET, Method::DELETE, Method::PUT])
@@ -33,6 +35,7 @@ async fn api() -> Result<(), DbErr> {
         .layer(Extension(db))
         .layer(Extension(r2_manager))
         .layer(Extension(r2_url))
+        .layer(Extension(meilisearch_client))
         .layer(cors)
         .layer(DefaultBodyLimit::max(1024 * 1024 * 10));
     //Server

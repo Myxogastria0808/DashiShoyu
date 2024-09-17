@@ -13,21 +13,20 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, LoaderTrait, QueryFilter, Set,
 };
 use serde_json::json;
-use server::AppError;
+use server::{AppError, MeiliSearchItemData};
 use std::collections::HashMap;
 
 //search with Meilisearch
 pub async fn search_item_get(
     Query(param): Query<HashMap<String, String>>,
+    Extension(meilisearch_client): Extension<meilisearch_sdk::client::Client>,
 ) -> Result<Json<Vec<server::MeiliSearchItemData>>, AppError> {
     let keywords = match param.get("keywords") {
         Some(keywords) => keywords,
         None => "",
     };
-    //connect meilisearch
-    let client = server::connect_meilisearch().await;
     //get result data
-    let result: Vec<server::MeiliSearchItemData> = client
+    let result: Vec<server::MeiliSearchItemData> = meilisearch_client
         .index("item")
         .search()
         .with_query(keywords)
@@ -225,8 +224,9 @@ pub async fn get_each_item_get(
 pub async fn update_item_put(
     Path(id): Path<i32>,
     Extension(db): Extension<DatabaseConnection>,
+    Extension(meilisearch_client): Extension<meilisearch_sdk::client::Client>,
     mut multipart: Multipart,
-) -> Result<(), AppError> {
+) -> Result<Json<server::MeiliSearchItemData>, AppError> {
     //parent_visible_idに変更があるかを確認するためのflag
     let mut is_chnaged_parent_visible_id_flag = false;
     //visible_idが変更されているかどうかの確認するためのflag
@@ -632,32 +632,51 @@ pub async fn update_item_put(
             update_item_model.updated_at = Set(Utc::now().naive_utc());
             update_item_model.update(&db).await?;
             //update meilisearch data
-            let mut update_item_model: item::ActiveModel = Item::find()
+            let update_item_model = Item::find()
                 .filter(item::Column::Id.eq(id))
                 .one(&db)
                 .await?
-                .ok_or(AppError(anyhow::anyhow!("Item not found")))?
-                .into();
-            let 
+                .ok_or(AppError(anyhow::anyhow!("Item not found")))?;
+            let update_label_model = Label::find()
+                .filter(label::Column::Id.eq(update_item_model.label_id))
+                .one(&db)
+                .await?
+                .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
+            let update_parent_label_model = Label::find()
+                .filter(label::Column::Id.eq(update_item_model.parent_label_id))
+                .one(&db)
+                .await?
+                .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
+            let update_grand_parent_label_model = Label::find()
+                .filter(label::Column::Id.eq(update_item_model.grand_parent_label_id))
+                .one(&db)
+                .await?
+                .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
             let meilisearch_update_item: server::MeiliSearchItemData =
                 server::MeiliSearchItemData {
                     id,
-                    visible_id: String,
-                    parent_visible_id: String,
-                    grand_parent_visible_id: String,
+                    visible_id: update_label_model.visible_id,
+                    parent_visible_id: update_parent_label_model.visible_id,
+                    grand_parent_visible_id: update_grand_parent_label_model.visible_id,
                     name: update_item_model.name,
                     product_number: update_item_model.product_number,
                     photo_url: update_item_model.photo_url,
                     record: update_item_model.record,
-                    color: Color,
+                    color: update_label_model.color,
                     description: update_item_model.description,
                     year_purchased: update_item_model.year_purchased,
                     connector: update_item_model.connector,
                     created_at: update_item_model.created_at,
                     updated_at: update_item_model.updated_at,
                 };
+            let item_meilisearch = meilisearch_client
+                .index("item")
+                .add_documents(&vec![meilisearch_update_item.clone()], Some("id"))
+                .await
+                .unwrap();
+            println!("[INFO]: MeiliSearch Result {:#?}", item_meilisearch);
             //return
-            return Ok(());
+            return Ok(Json(meilisearch_update_item));
         }
         //parent_visible_idが変更されている場合の処理 (parent_visible_idのみが変更されている場合の処理)
         //update処理
@@ -678,10 +697,52 @@ pub async fn update_item_put(
         update_item_model.year_purchased = Set(update_data.year_purchased);
         update_item_model.connector = Set(update_data.connector);
         update_item_model.updated_at = Set(Utc::now().naive_utc());
-
         update_item_model.update(&db).await?;
+        //update meilisearch data
+        let update_item_model = Item::find()
+            .filter(item::Column::Id.eq(id))
+            .one(&db)
+            .await?
+            .ok_or(AppError(anyhow::anyhow!("Item not found")))?;
+        let update_label_model = Label::find()
+            .filter(label::Column::Id.eq(update_item_model.label_id))
+            .one(&db)
+            .await?
+            .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
+        let update_parent_label_model = Label::find()
+            .filter(label::Column::Id.eq(update_item_model.parent_label_id))
+            .one(&db)
+            .await?
+            .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
+        let update_grand_parent_label_model = Label::find()
+            .filter(label::Column::Id.eq(update_item_model.grand_parent_label_id))
+            .one(&db)
+            .await?
+            .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
+        let meilisearch_update_item: server::MeiliSearchItemData = server::MeiliSearchItemData {
+            id,
+            visible_id: update_label_model.visible_id,
+            parent_visible_id: update_parent_label_model.visible_id,
+            grand_parent_visible_id: update_grand_parent_label_model.visible_id,
+            name: update_item_model.name,
+            product_number: update_item_model.product_number,
+            photo_url: update_item_model.photo_url,
+            record: update_item_model.record,
+            color: update_label_model.color,
+            description: update_item_model.description,
+            year_purchased: update_item_model.year_purchased,
+            connector: update_item_model.connector,
+            created_at: update_item_model.created_at,
+            updated_at: update_item_model.updated_at,
+        };
+        let item_meilisearch = meilisearch_client
+            .index("item")
+            .add_documents(&vec![meilisearch_update_item.clone()], Some("id"))
+            .await
+            .unwrap();
+        println!("[INFO]: MeiliSearch Result {:#?}", item_meilisearch);
         //return
-        return Ok(());
+        return Ok(Json(meilisearch_update_item));
     }
     //visible_idが変更されている場合の処理 (visible_idのみが変更されている場合の処理)
     if is_changed_visible_id_flag {
@@ -745,10 +806,52 @@ pub async fn update_item_put(
         update_item_model.year_purchased = Set(update_data.year_purchased);
         update_item_model.connector = Set(update_data.connector);
         update_item_model.updated_at = Set(Utc::now().naive_utc());
-
         update_item_model.update(&db).await?;
+        //update meilisearch data
+        let update_item_model = Item::find()
+            .filter(item::Column::Id.eq(id))
+            .one(&db)
+            .await?
+            .ok_or(AppError(anyhow::anyhow!("Item not found")))?;
+        let update_label_model = Label::find()
+            .filter(label::Column::Id.eq(update_item_model.label_id))
+            .one(&db)
+            .await?
+            .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
+        let update_parent_label_model = Label::find()
+            .filter(label::Column::Id.eq(update_item_model.parent_label_id))
+            .one(&db)
+            .await?
+            .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
+        let update_grand_parent_label_model = Label::find()
+            .filter(label::Column::Id.eq(update_item_model.grand_parent_label_id))
+            .one(&db)
+            .await?
+            .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
+        let meilisearch_update_item: server::MeiliSearchItemData = server::MeiliSearchItemData {
+            id,
+            visible_id: update_label_model.visible_id,
+            parent_visible_id: update_parent_label_model.visible_id,
+            grand_parent_visible_id: update_grand_parent_label_model.visible_id,
+            name: update_item_model.name,
+            product_number: update_item_model.product_number,
+            photo_url: update_item_model.photo_url,
+            record: update_item_model.record,
+            color: update_label_model.color,
+            description: update_item_model.description,
+            year_purchased: update_item_model.year_purchased,
+            connector: update_item_model.connector,
+            created_at: update_item_model.created_at,
+            updated_at: update_item_model.updated_at,
+        };
+        let item_meilisearch = meilisearch_client
+            .index("item")
+            .add_documents(&vec![meilisearch_update_item.clone()], Some("id"))
+            .await
+            .unwrap();
+        println!("[INFO]: MeiliSearch Result {:#?}", item_meilisearch);
         //return
-        return Ok(());
+        return Ok(Json(meilisearch_update_item));
     }
     //visible_id・parent_visible_idが変更されていない場合の処理
     //update処理
@@ -767,8 +870,51 @@ pub async fn update_item_put(
     update_item_model.updated_at = Set(Utc::now().naive_utc());
 
     update_item_model.update(&db).await?;
+    //update meilisearch data
+    let update_item_model = Item::find()
+        .filter(item::Column::Id.eq(id))
+        .one(&db)
+        .await?
+        .ok_or(AppError(anyhow::anyhow!("Item not found")))?;
+    let update_label_model = Label::find()
+        .filter(label::Column::Id.eq(update_item_model.label_id))
+        .one(&db)
+        .await?
+        .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
+    let update_parent_label_model = Label::find()
+        .filter(label::Column::Id.eq(update_item_model.parent_label_id))
+        .one(&db)
+        .await?
+        .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
+    let update_grand_parent_label_model = Label::find()
+        .filter(label::Column::Id.eq(update_item_model.grand_parent_label_id))
+        .one(&db)
+        .await?
+        .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
+    let meilisearch_update_item: server::MeiliSearchItemData = server::MeiliSearchItemData {
+        id,
+        visible_id: update_label_model.visible_id,
+        parent_visible_id: update_parent_label_model.visible_id,
+        grand_parent_visible_id: update_grand_parent_label_model.visible_id,
+        name: update_item_model.name,
+        product_number: update_item_model.product_number,
+        photo_url: update_item_model.photo_url,
+        record: update_item_model.record,
+        color: update_label_model.color,
+        description: update_item_model.description,
+        year_purchased: update_item_model.year_purchased,
+        connector: update_item_model.connector,
+        created_at: update_item_model.created_at,
+        updated_at: update_item_model.updated_at,
+    };
+    let item_meilisearch = meilisearch_client
+        .index("item")
+        .add_documents(&vec![meilisearch_update_item.clone()], Some("id"))
+        .await
+        .unwrap();
+    println!("[INFO]: MeiliSearch Result {:#?}", item_meilisearch);
     //return
-    Ok(())
+    Ok(Json(meilisearch_update_item))
 }
 // pub async fn update_item_put(
 //     Path(id): Path<i32>,
