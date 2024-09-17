@@ -10,9 +10,7 @@ const SearchItemResults = (props: { data: ItemDataType[] }) => {
           <li key={index}>
             <p>Id: {item.id}</p>
             <p>VisibleId: {item.visible_id}</p>
-            <p>ParentId: {item.parent_id}</p>
             <p>ParentVisibleId: {item.parent_visible_id}</p>
-            <p>GrandParentId: {item.grand_parent_id}</p>
             <p>GrandParentVisibleId: {item.grand_parent_visible_id}</p>
             <p>Name: {item.name}</p>
             <p>ProductNumber: {item.product_number}</p>

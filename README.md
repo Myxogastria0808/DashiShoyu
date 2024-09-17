@@ -213,12 +213,10 @@ erDiagram
     }
     ParentLabelJunction {
         i32 Id PK "autoincrement"
-        i32 ItemId FK, UK "Item Tableとリレーションを貼っている"
         i32 LabelId FK "Label Tableとリレーションを貼っている"
     }
     GrandParentLabelJunction {
         i32 Id PK "autoincrement"
-        i32 ItemId FK, UK "Item Tableとリレーションを貼っている"
         i32 LabelId FK "Label Tableとリレーションを貼っている"
     }
     Label {

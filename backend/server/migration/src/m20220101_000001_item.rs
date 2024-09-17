@@ -1,3 +1,6 @@
+use crate::m20220101_000001_grand_parent_label_junction::GrandParentLabelJunction;
+use crate::m20220101_000001_label::Label;
+use crate::m20220101_000001_parent_label_junction::ParentLabelJunction;
 use sea_orm_migration::prelude::*;
 
 #[derive(DeriveMigrationName)]
@@ -14,30 +17,52 @@ impl MigrationTrait for Migration {
                     .col(
                         ColumnDef::new(Item::Id)
                             .integer()
-                            .unique_key()
                             .not_null()
                             .auto_increment()
                             .primary_key(),
                     )
                     .col(
-                        ColumnDef::new(Item::VisibleId)
-                            .string()
+                        ColumnDef::new(Item::LabelId)
+                            .integer()
                             .unique_key()
                             .not_null(),
                     )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .from(Item::Table, Item::LabelId)
+                            .to(Label::Table, Label::Id),
+                    )
                     .col(ColumnDef::new(Item::ParentId).integer().not_null())
-                    .col(ColumnDef::new(Item::ParentVisibleId).string().not_null())
+                    .col(
+                        ColumnDef::new(Item::ParentLabelId)
+                            .integer()
+                            .unique_key()
+                            .not_null(),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .from(Item::Table, Item::ParentLabelId)
+                            .to(ParentLabelJunction::Table, ParentLabelJunction::Id),
+                    )
                     .col(ColumnDef::new(Item::GrandParentId).integer().not_null())
                     .col(
-                        ColumnDef::new(Item::GrandParentVisibleId)
-                            .string()
+                        ColumnDef::new(Item::GrandParentLabelId)
+                            .integer()
+                            .unique_key()
                             .not_null(),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .from(Item::Table, Item::GrandParentLabelId)
+                            .to(
+                                GrandParentLabelJunction::Table,
+                                GrandParentLabelJunction::Id,
+                            ),
                     )
                     .col(ColumnDef::new(Item::Name).string().not_null())
                     .col(ColumnDef::new(Item::ProductNumber).string().not_null())
                     .col(ColumnDef::new(Item::PhotoUrl).string().not_null())
                     .col(ColumnDef::new(Item::Record).string().not_null())
-                    .col(ColumnDef::new(Item::Color).string().not_null())
                     .col(ColumnDef::new(Item::Description).string().not_null())
                     .col(ColumnDef::new(Item::YearPurchased).integer())
                     .col(ColumnDef::new(Item::Connector).json().not_null())
@@ -59,36 +84,18 @@ impl MigrationTrait for Migration {
 enum Item {
     Table,
     Id,
-    VisibleId,
+    LabelId,
     ParentId,
-    ParentVisibleId,
+    ParentLabelId,
     GrandParentId,
-    GrandParentVisibleId,
+    GrandParentLabelId,
     Name,
     ProductNumber,
     PhotoUrl,
     Record,
-    Color,
     Description,
     YearPurchased,
     Connector,
     CreatedAt,
     UpdatedAt,
 }
-
-//// Id,
-// VisibleId,
-//// ParentId, <-生成時に設定
-//// ParentVisibleId, <-生成時に設定
-//// GrandParentId, <-生成時に設定
-//// GrandParentVisibleId, <-生成時に設定
-// Name,
-// ProductNumber,
-//? PhotoUrl, <-
-// Record,
-// Color,
-// Description,
-// YearPurchased,
-// Connector,
-//// CreatedAt, <-生成時に設定
-//// UpdatedAt,　<-生成時に設定

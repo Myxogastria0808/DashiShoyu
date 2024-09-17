@@ -33,17 +33,6 @@ const UpdateItemForm = (props: {
     defaultValues: {
       parent_visible_id: props.item.parent_visible_id,
       visible_id: props.item.visible_id,
-      color: props.item.color as
-        | "Red"
-        | "Orange"
-        | "Brown"
-        | "SkyBlue"
-        | "Blue"
-        | "Green"
-        | "Yellow"
-        | "Purple"
-        | "Pink"
-        | undefined,
       record: props.item.record as "Qr" | "Barcode" | "Nothing" | undefined,
       name: props.item.name,
       product_number: props.item.product_number,
@@ -54,6 +43,7 @@ const UpdateItemForm = (props: {
   });
   const onSubmit: SubmitHandler<UpdateItemFormSchemaType> = async (data) => {
     //空の文字列を削除
+    console.log("hello");
     const result_connector: { connector: string }[] = [];
     data.connector.map((connector, _index) => {
       if (connector.connector !== "") {
@@ -78,7 +68,6 @@ const UpdateItemForm = (props: {
     const formData: FormData = new FormData();
     formData.append("parent_visible_id", data.parent_visible_id);
     formData.append("visible_id", data.visible_id);
-    formData.append("color", data.color);
     formData.append("record", data.record);
     formData.append("name", data.name);
     formData.append("product_number", data.product_number);
@@ -117,24 +106,9 @@ const UpdateItemForm = (props: {
       <p>{errors.parent_visible_id && errors.parent_visible_id.message}</p>
       <br />
       <label htmlFor="visible_id">Visible Id: </label>
-      <input id="viible_id" {...register("visible_id")} />
+      <input id="visible_id" {...register("visible_id")} />
       <br />
       <p>{errors.visible_id && errors.visible_id.message}</p>
-      <br />
-      <label htmlFor="color">Color: </label>
-      <select id="color" {...register("color")}>
-        <option value="Red">赤</option>
-        <option value="Orange">橙</option>
-        <option value="Brown">茶</option>
-        <option value="SkyBlue">水</option>
-        <option value="Blue">青</option>
-        <option value="Green">緑</option>
-        <option value="Yellow">黄</option>
-        <option value="Purple">紫</option>
-        <option value="Pink">桃</option>
-      </select>
-      <br />
-      <p>{errors.color && errors.color.message}</p>
       <br />
       <label htmlFor="record">Record: </label>
       <select id="record" {...register("record")}>

@@ -16,7 +16,8 @@ pub use utils::meilisearch::connect_meilisearch;
 //model
 mod models;
 pub use models::item_models::ControlItemData;
-pub use models::item_models::MeilisearchItemData;
+pub use models::item_models::ItemData;
+pub use models::item_models::MeiliSearchItemData;
 
 //error
 mod error;

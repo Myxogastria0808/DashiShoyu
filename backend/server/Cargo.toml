@@ -4,13 +4,14 @@ version = "0.0.1"
 edition = "2021"
 
 [workspace]
-members = [".", "migration", "entity"]
+members = [".", "entity", "migration"]
 
 [dependencies]
 #axum
 axum = {version = "0.7.5", features = ["multipart", "macros"] }
 tokio = { version = "1.39.2", features = ["full"] }
 tower-http = { version = "0.5.2", features = ["cors"] }
+anyhow = "1.0.86"
 #.env
 dotenvy = "0.15.7"
 once_cell = "1.19.0"
@@ -30,4 +31,3 @@ image = "0.25.2"
 webp = "0.3.0"
 #meilisearch
 meilisearch-sdk = "0.27.1"
-anyhow = "1.0.86"

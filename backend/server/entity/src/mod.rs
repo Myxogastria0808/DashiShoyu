@@ -2,4 +2,8 @@
 
 pub mod prelude;
 
+pub mod grand_parent_label_junction;
 pub mod item;
+pub mod label;
+pub mod object;
+pub mod parent_label_junction;

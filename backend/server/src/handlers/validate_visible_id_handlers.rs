@@ -1,4 +1,7 @@
-use ::entity::item::{self, Color, Entity as Item, Record};
+use ::entity::{
+    item::{self, Entity as Item, Record},
+    label::Color,
+};
 use axum::{
     extract::{Multipart, Path, Query},
     Extension, Json,

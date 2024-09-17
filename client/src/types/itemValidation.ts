@@ -20,20 +20,6 @@ const updateItemFormSchema = z.object({
     .regex(/^[A-Z0-9]+$/, {
       message: "半角英数字（英字は大文字）で入力してください",
     }),
-  color: z.enum(
-    [
-      "Red",
-      "Orange",
-      "Brown",
-      "SkyBlue",
-      "Blue",
-      "Green",
-      "Yellow",
-      "Purple",
-      "Pink",
-    ],
-    { message: "不正な値が入力されました。" }
-  ),
   record: z.enum(["Qr", "Barcode", "Nothing"], {
     message: "不正な値が入力されました。",
   }),
@@ -76,20 +62,6 @@ const registerItemFormSchema = z.object({
     .regex(/^[A-Z0-9]+$/, {
       message: "半角英数字（英字は大文字）で入力してください",
     }),
-  color: z.enum(
-    [
-      "Red",
-      "Orange",
-      "Brown",
-      "SkyBlue",
-      "Blue",
-      "Green",
-      "Yellow",
-      "Purple",
-      "Pink",
-    ],
-    { message: "不正な値が入力されました。" }
-  ),
   record: z.enum(["Qr", "Barcode", "Nothing"], {
     message: "不正な値が入力されました。",
   }),

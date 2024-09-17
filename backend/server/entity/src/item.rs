@@ -9,24 +9,6 @@ use serde::{Deserialize, Serialize};
     db_type = "String(StringLen::None)",
     rename_all = "PascalCase"
 )]
-pub enum Color {
-    Red,
-    Orange,
-    Brown,
-    SkyBlue,
-    Blue,
-    Green,
-    Yellow,
-    Purple,
-    Pink,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
-#[sea_orm(
-    rs_type = "String",
-    db_type = "String(StringLen::None)",
-    rename_all = "PascalCase"
-)]
 pub enum Record {
     #[sea_orm(string_value = "QR")]
     Qr,
@@ -42,16 +24,17 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
     #[sea_orm(unique)]
-    pub visible_id: String,
+    pub label_id: i32,
     pub parent_id: i32,
-    pub parent_visible_id: String,
+    #[sea_orm(unique)]
+    pub parent_label_id: i32,
     pub grand_parent_id: i32,
-    pub grand_parent_visible_id: String,
+    #[sea_orm(unique)]
+    pub grand_parent_label_id: i32,
     pub name: String,
     pub product_number: String,
     pub photo_url: String,
     pub record: Record,
-    pub color: Color,
     pub description: String,
     pub year_purchased: Option<i32>,
     pub connector: Json,
@@ -60,6 +43,49 @@ pub struct Model {
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::grand_parent_label_junction::Entity",
+        from = "Column::GrandParentLabelId",
+        to = "super::grand_parent_label_junction::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    GrandParentLabelJunction,
+    #[sea_orm(
+        belongs_to = "super::label::Entity",
+        from = "Column::LabelId",
+        to = "super::label::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    Label,
+    #[sea_orm(
+        belongs_to = "super::parent_label_junction::Entity",
+        from = "Column::ParentLabelId",
+        to = "super::parent_label_junction::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    ParentLabelJunction,
+}
+
+impl Related<super::grand_parent_label_junction::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::GrandParentLabelJunction.def()
+    }
+}
+
+impl Related<super::label::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Label.def()
+    }
+}
+
+impl Related<super::parent_label_junction::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ParentLabelJunction.def()
+    }
+}
 
 impl ActiveModelBehavior for ActiveModel {}

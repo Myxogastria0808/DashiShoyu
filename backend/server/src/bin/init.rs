@@ -1,7 +1,14 @@
-use ::entity::item::{self, Color, Entity as Item, Record};
+use ::entity::{
+    grand_parent_label_junction::{self, Entity as GrandParentLabelJunction},
+    item::{self, Entity as Item, Record},
+    label::{self, Color, Entity as Label},
+    parent_label_junction::{self, Entity as ParentLabelJunction},
+};
 use chrono::Utc;
 use csv::Error;
-use sea_orm::{self, ActiveModelTrait, DatabaseConnection, DbErr, EntityTrait, InsertResult, Set};
+use sea_orm::{
+    self, ActiveModelTrait, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter, Set,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{collections::HashMap, env, process};
@@ -54,7 +61,7 @@ struct ItemData {
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     match make_item_data().await {
-        Ok(data) => match insert_item_data(data).await {
+        Ok(data) => match insert_item_data_to_db(data).await {
             Ok(_) => {
                 println!("\nSuccess!");
             }
@@ -178,23 +185,104 @@ async fn make_item_data() -> Result<Vec<ItemData>, Box<Error>> {
     Ok(data)
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct VisibleIds {
+    id: i32,
+    visible_id: String,
+    label_id: i32,
+    parent_visible_id: String,
+    parent_label_id: i32,
+    parent_label_junction_id: i32,
+    grand_parent_visible_id: String,
+    grand_parent_label_id: i32,
+    grand_parent_label_junction_id: i32,
+}
+
 async fn insert_item_data_to_db(data: Vec<ItemData>) -> Result<(), DbErr> {
     //connect db
     let db: DatabaseConnection = server::connect_db().await?;
-    let mut all_data: Vec<(String, i32)> = Vec::new();
-    // Insert data
-    for item in data.iter() {
-        let item_model = item::ActiveModel {
+    let mut visible_ids_vec: Vec<VisibleIds> = Vec::new();
+    for item in &data {
+        // Insert label data
+        let label_model = label::ActiveModel {
             visible_id: Set(item.visible_id.clone()),
-            parent_id: Set(0),
-            parent_visible_id: Set(item.parent_visible_id.clone()),
-            grand_parent_id: Set(0),
-            grand_parent_visible_id: Set(item.grand_parent_visible_id.clone()),
+            color: Set(item.color.clone()),
+            ..Default::default()
+        };
+        let inserted_label_data = Label::insert(label_model).exec(&db).await?;
+        let label_id = inserted_label_data.last_insert_id;
+        visible_ids_vec.push(VisibleIds {
+            id: 0,
+            visible_id: item.visible_id.clone(),
+            label_id,
+            parent_visible_id: item.parent_visible_id.clone(),
+            parent_label_id: 0,
+            parent_label_junction_id: 0,
+            grand_parent_visible_id: item.grand_parent_visible_id.clone(),
+            grand_parent_label_id: 0,
+            grand_parent_label_junction_id: 0,
+        });
+        println!("[INFO]: {:?}", inserted_label_data);
+    }
+    println!("[INFO]: insert to Label Table was completed!");
+    for item in &data {
+        let parent_visible_ids = visible_ids_vec
+            .clone()
+            .into_iter()
+            .find(|visible_ids| item.parent_visible_id == visible_ids.visible_id)
+            .expect("Parent visible id is not found.");
+        let grand_parent_visible_ids = visible_ids_vec
+            .clone()
+            .into_iter()
+            .find(|visible_ids| item.grand_parent_visible_id == visible_ids.visible_id)
+            .expect("Parent visible id is not found.");
+        let visible_ids_index = visible_ids_vec
+            .clone()
+            .into_iter()
+            .position(|visible_ids| item.visible_id == visible_ids.visible_id)
+            .expect("Visible id is not found.");
+        visible_ids_vec[visible_ids_index].parent_label_id = parent_visible_ids.label_id;
+        visible_ids_vec[visible_ids_index].grand_parent_label_id =
+            grand_parent_visible_ids.label_id;
+    }
+    for (visible_ids_vec_index, visible_ids) in visible_ids_vec.clone().into_iter().enumerate() {
+        let parent_label_junction_model = parent_label_junction::ActiveModel {
+            label_id: Set(visible_ids.parent_label_id),
+            ..Default::default()
+        };
+        let parent_label_junction_id = ParentLabelJunction::insert(parent_label_junction_model)
+            .exec(&db)
+            .await?
+            .last_insert_id;
+        let grand_parent_label_junction_model = grand_parent_label_junction::ActiveModel {
+            label_id: Set(visible_ids.grand_parent_label_id),
+            ..Default::default()
+        };
+        let grand_parent_label_junction_id =
+            GrandParentLabelJunction::insert(grand_parent_label_junction_model)
+                .exec(&db)
+                .await?
+                .last_insert_id;
+        visible_ids_vec[visible_ids_vec_index].parent_label_junction_id = parent_label_junction_id;
+        visible_ids_vec[visible_ids_vec_index].grand_parent_label_junction_id =
+            grand_parent_label_junction_id;
+    }
+    for item in &data {
+        let visible_ids = visible_ids_vec
+            .clone()
+            .into_iter()
+            .find(|visible_ids| item.visible_id == visible_ids.visible_id)
+            .expect("Visible id is not found.");
+        let item_model = item::ActiveModel {
+            label_id: Set(visible_ids.label_id),
+            parent_id: Set(0), //初期値を0でセット
+            parent_label_id: Set(visible_ids.parent_label_junction_id),
+            grand_parent_id: Set(0), //初期値を0でセット
+            grand_parent_label_id: Set(visible_ids.grand_parent_label_junction_id),
             name: Set(item.name.clone()),
             product_number: Set(item.product_number.clone()),
             photo_url: Set(item.photo_url.clone()),
             record: Set(item.record.clone()),
-            color: Set(item.color.clone()),
             description: Set(item.description.clone()),
             year_purchased: Set(item.year_purchased),
             connector: Set(json!(item.connector.clone())),
@@ -202,76 +290,24 @@ async fn insert_item_data_to_db(data: Vec<ItemData>) -> Result<(), DbErr> {
             updated_at: Set(Utc::now().naive_local()),
             ..Default::default()
         };
-        let inserted_data: InsertResult<item::ActiveModel> =
-            Item::insert(item_model).exec(&db).await?;
-        let inserted_id = inserted_data.last_insert_id;
-        all_data.push((item.visible_id.clone(), inserted_id));
-    }
-    let hash_map: HashMap<String, i32> = all_data.into_iter().collect();
-    let all_data = Item::find().all(&db).await?;
-    // get r2_url
-    let r2_url = server::get_r2_url().await;
-    for item in all_data {
-        let parent_visible_id = item.parent_visible_id.to_owned();
-        let grand_parent_visible_id = item.grand_parent_visible_id.to_owned();
-        let id = item.id.to_owned();
-        let mut item: item::ActiveModel = item.into();
-        item.parent_id = Set(match hash_map.get(&parent_visible_id) {
-            Some(id) => *id,
-            None => {
-                panic!("Parent item is not found.");
-            }
-        });
-        item.grand_parent_id = Set(match hash_map.get(&grand_parent_visible_id) {
-            Some(id) => *id,
-            None => {
-                panic!("Parent item is not found.");
-            }
-        });
-        item.photo_url = Set(format!("{}/{}.webp", &r2_url, id));
-        item.update(&db).await?;
-    }
-    println!("Insert data to DB was completed!");
-    Ok(())
-}
-
-async fn insert_item_data_to_meilisearch() -> Result<(), DbErr> {
-    //connect db
-    let db: DatabaseConnection = server::connect_db().await?;
-    //get all db data
-    let result_vec: Vec<server::MeilisearchItemData> = Item::find()
-        .all(&db)
-        .await?
-        .into_iter()
-        .map(|item| server::MeilisearchItemData {
-            id: item.id,
-            visible_id: item.visible_id,
-            parent_id: item.parent_id,
-            parent_visible_id: item.parent_visible_id,
-            grand_parent_id: item.grand_parent_id,
-            grand_parent_visible_id: item.grand_parent_visible_id,
-            name: item.name,
-            product_number: item.product_number,
-            photo_url: item.photo_url,
-            record: item.record,
-            color: item.color,
-            description: item.description,
-            year_purchased: item.year_purchased,
-            connector: item.connector,
-            created_at: item.created_at,
-            updated_at: item.updated_at,
-        })
-        .collect();
-    //upload image
-    // get r2_manager
-    let r2_manager = server::connect_r2().await;
-    for item in result_vec.clone().into_iter() {
-        println!("Now target: {} (id: {})", item.visible_id, item.id);
-        let input_file_path = format!("./src/bin/data/in/{}.jpg", item.visible_id);
-        let output_file_path = format!("./src/bin/data/out/{}.webp", item.id);
+        let inserted_item = Item::insert(item_model).exec(&db).await?;
+        let inserted_item_id = inserted_item.last_insert_id;
+        let visible_ids_index = visible_ids_vec
+            .clone()
+            .into_iter()
+            .position(|visible_ids| item.visible_id == visible_ids.visible_id)
+            .expect("Visible id is not found.");
+        visible_ids_vec[visible_ids_index].id = inserted_item_id;
+        //upload image
+        let r2_manager = server::connect_r2().await;
+        println!(
+            "[INFO]: Now target {} ({}.webp)",
+            visible_ids.visible_id, inserted_item_id
+        );
+        let input_file_path = format!("./src/bin/data/in/{}.jpg", visible_ids.visible_id);
+        let output_file_path = format!("./src/bin/data/out/{}.webp", inserted_item_id);
         let _ = server::convert_to_webp(&input_file_path, &output_file_path, 75.0);
-        //upload image to R2
-        let file_name = format!("{}.webp", item.id);
+        let file_name = format!("{}.webp", inserted_item_id);
         let _ = server::upload_image_file(
             r2_manager.clone(),
             &input_file_path,
@@ -279,36 +315,321 @@ async fn insert_item_data_to_meilisearch() -> Result<(), DbErr> {
             "image/webp",
         )
         .await;
-        //check image is uploaded
-        match server::check_is_uploaded(r2_manager.clone(), &file_name).await {
-            true => {
-                println!(
-                    "Upload {}.webp was succeeded!: {}",
-                    item.id, item.visible_id
-                );
-            }
-            false => {
-                panic!("Upload was failed!: {} ({}.webp)", item.visible_id, item.id);
-            }
-        }
-        println!("Upload was completed!: {}", item.visible_id);
+        let _ = server::get_image(r2_manager, &file_name)
+            .await
+            .expect("upload image was failed.");
+        println!(
+            "[INFO]: Upload {} image file was completed!",
+            visible_ids.visible_id
+        );
+        //update photo_url
+        let mut update_item: item::ActiveModel = Item::find_by_id(inserted_item_id)
+            .one(&db)
+            .await?
+            .expect("Register item was failed.")
+            .into();
+        update_item.photo_url = Set(format!(
+            "{}/{}.webp",
+            server::get_r2_url().await,
+            inserted_item_id
+        ));
+        update_item.update(&db).await?;
     }
-    println!("Upload files were completed!");
-    //connect meilisearch
+    for item in &data {
+        let visible_ids = visible_ids_vec
+            .clone()
+            .into_iter()
+            .find(|visible_ids| item.visible_id == visible_ids.visible_id)
+            .expect("Visible id is not found.");
+        let update_item = Item::find_by_id(visible_ids.id)
+            .one(&db)
+            .await?
+            .expect("Register item was failed.");
+        let mut update_item: item::ActiveModel = update_item.into();
+        let parent_label = Label::find()
+            .filter(label::Column::VisibleId.eq(visible_ids.parent_visible_id))
+            .one(&db)
+            .await?
+            .expect("Parent label is not found.");
+        let parent_item = Item::find()
+            .filter(item::Column::LabelId.eq(parent_label.id))
+            .one(&db)
+            .await?
+            .expect("Parent item is not found.");
+        let grand_parent_label = Label::find()
+            .filter(label::Column::VisibleId.eq(visible_ids.grand_parent_visible_id))
+            .one(&db)
+            .await?
+            .expect("Parent label is not found.");
+        let grand_parent_item = Item::find()
+            .filter(item::Column::LabelId.eq(grand_parent_label.id))
+            .one(&db)
+            .await?
+            .expect("Parent item is not found.");
+        update_item.parent_id = Set(parent_item.id);
+        update_item.grand_parent_id = Set(grand_parent_item.id);
+        let result = update_item.update(&db).await?;
+        println!("[INFO]: {:#?}", result);
+    }
+    println!("[INFO]: Insert data to DB was completed!");
+    let mut meilisearch_item_vec: Vec<server::MeiliSearchItemData> = Vec::new();
+    for item in data.clone() {
+        let db_label_item = Label::find()
+            .filter(label::Column::VisibleId.eq(&item.visible_id))
+            .one(&db)
+            .await?
+            .expect("Item is not found.");
+        let db_item = Item::find()
+            .filter(item::Column::LabelId.eq(db_label_item.id))
+            .one(&db)
+            .await?
+            .expect("Item is not found.");
+        let meilisearch_item = server::MeiliSearchItemData {
+            id: db_item.id,
+            visible_id: item.visible_id.clone(),
+            parent_visible_id: item.parent_visible_id.clone(),
+            grand_parent_visible_id: item.grand_parent_visible_id.clone(),
+            name: db_item.name,
+            product_number: db_item.product_number,
+            photo_url: db_item.photo_url,
+            record: db_item.record,
+            color: item.color,
+            description: db_item.description,
+            year_purchased: db_item.year_purchased,
+            connector: db_item.connector,
+            created_at: db_item.created_at,
+            updated_at: db_item.updated_at,
+        };
+        meilisearch_item_vec.push(meilisearch_item);
+    }
     let client = server::connect_meilisearch().await;
     let item_meilisearch = client
         .index("item")
-        .add_documents(&result_vec, Some("id"))
+        .add_documents(&meilisearch_item_vec, Some("id"))
         .await
         .unwrap();
-    println!("\n[Meiliserch Result]");
-    println!("{:#?}", item_meilisearch);
-    println!("\nInsert data to MeiliSearch was completed!");
+    println!("[INFO]: MeiliSearch Result\n{:#?}", item_meilisearch);
+    println!("\n[INFO]: Insert data to MeiliSearch was completed!");
     Ok(())
+    ////////////////////////////////////////////////////////////////////////
+    // let mut pairs_of_id_and_visible_id: Vec<(i32, String)> = Vec::new();
+    // let mut pairs_of_visible_id_and_id: Vec<(String, i32)> = Vec::new();
+    // let mut pairs_of_visible_id_and_parent_visible_id: Vec<(String, String)> = Vec::new();
+    // for item in data.iter() {
+    //     // Insert label data
+    //     let label_model = label::ActiveModel {
+    //         visible_id: Set(item.visible_id.clone()),
+    //         color: Set(item.color.clone()),
+    //         ..Default::default()
+    //     };
+    //     let inserted_label_data = Label::insert(label_model).exec(&db).await?;
+    //     let inserted_label_id = inserted_label_data.last_insert_id;
+    //     // Insert data
+    //     let item_model = item::ActiveModel {
+    //         label_id: Set(inserted_label_id),
+    //         parent_id: Set(0),
+    //         parent_label_id: Set(dummy_parent_label_id), //初期値を乱数でセット
+    //         grand_parent_id: Set(0),
+    //         grand_parent_label_id: Set(dummy_grand_parent_label_id), //初期値を乱数でセット
+    //         name: Set(item.name.clone()),
+    //         product_number: Set(item.product_number.clone()),
+    //         photo_url: Set(item.photo_url.clone()),
+    //         record: Set(item.record.clone()),
+    //         description: Set(item.description.clone()),
+    //         year_purchased: Set(item.year_purchased),
+    //         connector: Set(json!(item.connector.clone())),
+    //         created_at: Set(Utc::now().naive_local()),
+    //         updated_at: Set(Utc::now().naive_local()),
+    //         ..Default::default()
+    //     };
+    //     let inserted_data: InsertResult<item::ActiveModel> =
+    //         Item::insert(item_model).exec(&db).await?;
+    //     let inserted_id = inserted_data.last_insert_id;
+    //     pairs_of_id_and_visible_id.push((inserted_id, item.visible_id.clone()));
+    //     pairs_of_visible_id_and_id.push((item.visible_id.clone(), inserted_id));
+    //     pairs_of_visible_id_and_parent_visible_id
+    //         .push((item.visible_id.clone(), item.parent_visible_id.clone()));
+    // }
+    // let pairs_of_id_and_visible_id: HashMap<i32, String> =
+    //     pairs_of_id_and_visible_id.into_iter().collect();
+    // let pairs_of_visible_id_and_id: HashMap<String, i32> =
+    //     pairs_of_visible_id_and_id.into_iter().collect();
+    // let pairs_of_visible_id_and_parent_visible_id: HashMap<String, String> =
+    //     pairs_of_visible_id_and_parent_visible_id
+    //         .into_iter()
+    //         .collect();
+    // let all_data = Item::find().all(&db).await?;
+    // // get r2_url
+    // let r2_url = server::get_r2_url().await;
+    // // 3世代分のvisible_idを格納するvector
+    // let mut visible_ids_vec: Vec<(String, String, String)> = Vec::new();
+    // for item in all_data {
+    //     // item table id
+    //     let id = item.id.to_owned();
+    //     let mut item: item::ActiveModel = item.into();
+    //     let visible_id = &pairs_of_id_and_visible_id
+    //         .get(&id)
+    //         .expect("Visible id is not found.");
+    //     let parent_visible_id = &pairs_of_visible_id_and_parent_visible_id
+    //         .get(*visible_id)
+    //         .expect("Parent Visible id is not found.");
+    //     let grand_parent_visible_id = &pairs_of_visible_id_and_parent_visible_id
+    //         .get(*parent_visible_id)
+    //         .expect("Grand parent Visible id is not found.");
+    //     visible_ids_vec.push((
+    //         (**visible_id).clone(),
+    //         (**parent_visible_id).clone(),
+    //         (**grand_parent_visible_id).clone(),
+    //     ));
+    //     item.parent_label_id = Set(match pairs_of_visible_id_and_id.get(*parent_visible_id) {
+    //         Some(id) => {
+    //             let parent_item = Item::find_by_id(*id).one(&db).await?;
+    //             let parent_item = parent_item.expect("Parent item is not found.");
+    //             let parent_label = vec![parent_item]
+    //                 .load_one(Label, &db)
+    //                 .await
+    //                 .expect("Parent label is not found.")
+    //                 .first()
+    //                 .cloned()
+    //                 .expect("Parent label is not found.")
+    //                 .expect("Parent label is not found.");
+    //             let parent_label_junction_model = parent_label_junction::ActiveModel {
+    //                 label_id: Set(parent_label.id),
+    //                 ..Default::default()
+    //             };
+    //             ParentLabelJunction::insert(parent_label_junction_model)
+    //                 .exec(&db)
+    //                 .await
+    //                 .expect("Parent label junction is not found.")
+    //                 .last_insert_id
+    //         }
+    //         None => {
+    //             panic!("Parent item is not found.");
+    //         }
+    //     });
+    //     item.grand_parent_id = Set(
+    //         match pairs_of_visible_id_and_id.get(*grand_parent_visible_id) {
+    //             Some(id) => {
+    //                 let grand_parent_item = Item::find_by_id(*id).one(&db).await?;
+    //                 let grand_parent_item = grand_parent_item.expect("Parent item is not found.");
+    //                 let grand_parent_label = vec![grand_parent_item]
+    //                     .load_one(Label, &db)
+    //                     .await
+    //                     .expect("Parent label is not found.")
+    //                     .first()
+    //                     .cloned()
+    //                     .expect("Parent label is not found.")
+    //                     .expect("Parent label is not found.");
+    //                 let grand_parent_label_junction_model =
+    //                     grand_parent_label_junction::ActiveModel {
+    //                         label_id: Set(grand_parent_label.id),
+    //                         ..Default::default()
+    //                     };
+    //                 GrandParentLabelJunction::insert(grand_parent_label_junction_model)
+    //                     .exec(&db)
+    //                     .await
+    //                     .expect("Parent label junction is not found.")
+    //                     .last_insert_id
+    //             }
+    //             None => {
+    //                 panic!("Grand parent item is not found.");
+    //             }
+    //         },
+    //     );
+    //     item.photo_url = Set(format!("{}/{}.webp", &r2_url, id));
+    //     item.update(&db).await?;
+    // }
+    // println!("Insert data to DB was completed!");
+    // Ok(visible_ids_vec)
 }
 
-async fn insert_item_data(data: Vec<ItemData>) -> Result<(), DbErr> {
-    insert_item_data_to_db(data).await?;
-    insert_item_data_to_meilisearch().await?;
-    Ok(())
-}
+// async fn insert_item_data_to_meilisearch(
+//     visible_ids_vec: Vec<(String, String, String)>,
+// ) -> Result<(), DbErr> {
+//     //connect db
+//     let db: DatabaseConnection = server::connect_db().await?;
+//     //initialize
+//     let mut result_vec: Vec<server::MeiliSearchItemData> = Vec::new();
+//     //get all item table data
+//     let all_item_table_data = Item::find().all(&db).await?;
+//     //get all label table data
+//     let all_label_table_data = all_item_table_data.load_one(Label, &db).await?;
+//     for index in 0..all_item_table_data.len() {
+//         let item = all_item_table_data[index].clone();
+//         //for visible_id
+//         let visible_id_label = all_label_table_data[index]
+//             .clone()
+//             .expect("The item was not registered in label table");
+//         let mut parent_visible_id = "".to_string();
+//         let mut grand_parent_visible_id = "".to_string();
+//         for visible_ids in visible_ids_vec.clone().into_iter() {
+//             if visible_ids.0 == visible_id_label.visible_id {
+//                 parent_visible_id = visible_ids.1;
+//                 grand_parent_visible_id = visible_ids.2;
+//             }
+//         }
+//         //push data
+//         let item_data = server::MeiliSearchItemData {
+//             id: item.id,
+//             visible_id: visible_id_label.visible_id,
+//             parent_id: item.parent_id,
+//             parent_visible_id,
+//             grand_parent_id: item.grand_parent_id,
+//             grand_parent_visible_id,
+//             name: item.name,
+//             product_number: item.product_number,
+//             photo_url: item.photo_url,
+//             record: item.record,
+//             color: visible_id_label.color,
+//             description: item.description,
+//             year_purchased: item.year_purchased,
+//             connector: item.connector,
+//             created_at: item.created_at,
+//             updated_at: item.updated_at,
+//         };
+//         result_vec.push(item_data);
+//     }
+//     //upload image
+//     // get r2_manager
+//     let r2_manager = server::connect_r2().await;
+//     for item in result_vec.clone().into_iter() {
+//         println!("Now target: {} (id: {})", item.visible_id, item.id);
+//         let input_file_path = format!("./src/bin/data/in/{}.jpg", item.visible_id);
+//         let output_file_path = format!("./src/bin/data/out/{}.webp", item.id);
+//         let _ = server::convert_to_webp(&input_file_path, &output_file_path, 75.0);
+//         //upload image to R2
+//         let file_name = format!("{}.webp", item.id);
+//         let _ = server::upload_image_file(
+//             r2_manager.clone(),
+//             &input_file_path,
+//             &file_name,
+//             "image/webp",
+//         )
+//         .await;
+//         //check image is uploaded
+//         match server::check_is_uploaded(r2_manager.clone(), &file_name).await {
+//             true => {
+//                 println!(
+//                     "Upload {}.webp was succeeded!: {}",
+//                     item.id, item.visible_id
+//                 );
+//             }
+//             false => {
+//                 panic!("Upload was failed!: {} ({}.webp)", item.visible_id, item.id);
+//             }
+//         }
+//         println!("Upload was completed!: {}", item.visible_id);
+//     }
+//     println!("Upload files were completed!");
+//     //connect meilisearch
+//     let client = server::connect_meilisearch().await;
+//     let item_meilisearch = client
+//         .index("item")
+//         .add_documents(&result_vec, Some("id"))
+//         .await
+//         .unwrap();
+//     println!("\n[Meiliserch Result]");
+//     println!("{:#?}", item_meilisearch);
+//     println!("\nInsert data to MeiliSearch was completed!");
+//     Ok(())
+// }

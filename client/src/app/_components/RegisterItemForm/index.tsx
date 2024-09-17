@@ -22,7 +22,6 @@ const RegisterItemForm = () => {
   } = useForm<RegisterItemFormSchemaType>({
     resolver: zodResolver(registerItemFormSchema),
     defaultValues: {
-      color: "Red",
       record: "Qr",
     },
   });
@@ -53,7 +52,6 @@ const RegisterItemForm = () => {
     const formData = new FormData();
     formData.append("parent_visible_id", data.parent_visible_id);
     formData.append("visible_id", data.visible_id);
-    formData.append("color", data.color);
     formData.append("record", data.record);
     formData.append("name", data.name);
     formData.append("product_number", data.product_number);
@@ -99,21 +97,6 @@ const RegisterItemForm = () => {
       <input id="visible_id" {...register("visible_id")} />
       <br />
       <p>{errors.visible_id && errors.visible_id.message}</p>
-      <br />
-      <label htmlFor="color">Color: </label>
-      <select id="color" {...register("color")}>
-        <option value="Red">赤</option>
-        <option value="Orange">橙</option>
-        <option value="Brown">茶</option>
-        <option value="SkyBlue">水</option>
-        <option value="Blue">青</option>
-        <option value="Green">緑</option>
-        <option value="Yellow">黄</option>
-        <option value="Purple">紫</option>
-        <option value="Pink">桃</option>
-      </select>
-      <br />
-      <p>{errors.color && errors.color.message}</p>
       <br />
       <label htmlFor="record">Record: </label>
       <select id="record" {...register("record")}>
