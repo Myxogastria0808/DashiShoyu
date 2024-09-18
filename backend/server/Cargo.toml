@@ -31,3 +31,5 @@ image = "0.25.2"
 webp = "0.3.0"
 #meilisearch
 meilisearch-sdk = "0.27.1"
+#meilisearchのAPI叩く君
+reqwest = {version="0.12.7", features = ["json"]}

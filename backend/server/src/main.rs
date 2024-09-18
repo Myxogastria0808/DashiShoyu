@@ -25,8 +25,14 @@ async fn api() -> Result<(), DbErr> {
     let r2_url: String = server::get_r2_url().await;
     // MeiliSearch
     let meilisearch_client: meilisearch_sdk::client::Client = server::connect_meilisearch().await;
+    // requwest
+    let reqwest_client: reqwest::Client = reqwest::Client::new();
+    //meilisearch_admin_api_key
+    let meilisearch_admin_api_key: String = server::get_meilisearch_admin_api_key().await;
+    //meilisearch_url
+    let meilisearch_url: String = server::get_meilisearch_url().await;
     //CORS
-    let cors = CorsLayer::new()
+    let cors: CorsLayer = CorsLayer::new()
         .allow_methods([Method::POST, Method::GET, Method::DELETE, Method::PUT])
         .allow_origin(Any);
     //Router
@@ -36,8 +42,11 @@ async fn api() -> Result<(), DbErr> {
         .layer(Extension(r2_manager))
         .layer(Extension(r2_url))
         .layer(Extension(meilisearch_client))
+        .layer(Extension(reqwest_client))
+        .layer(Extension(meilisearch_admin_api_key))
+        .layer(Extension(meilisearch_url))
         .layer(cors)
-        .layer(DefaultBodyLimit::max(1024 * 1024 * 10));
+        .layer(DefaultBodyLimit::max(1024 * 1024 * 100));
     //Server
     dotenv().expect(".env file not found.");
     static API_URL: OnceCell<String> = OnceCell::new();

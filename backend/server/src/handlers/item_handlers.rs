@@ -13,7 +13,7 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, LoaderTrait, QueryFilter, Set,
 };
 use serde_json::json;
-use server::{AppError, MeiliSearchItemData};
+use server::AppError;
 use std::collections::HashMap;
 
 //search with Meilisearch
@@ -225,10 +225,13 @@ pub async fn update_item_put(
     Path(id): Path<i32>,
     Extension(db): Extension<DatabaseConnection>,
     Extension(meilisearch_client): Extension<meilisearch_sdk::client::Client>,
+    Extension(reqwest_client): Extension<reqwest::Client>,
+    Extension(meilisearch_admin_api_key): Extension<String>,
+    Extension(meilisearch_url): Extension<String>,
     mut multipart: Multipart,
 ) -> Result<Json<server::MeiliSearchItemData>, AppError> {
     //parent_visible_idに変更があるかを確認するためのflag
-    let mut is_chnaged_parent_visible_id_flag = false;
+    let mut is_chaged_parennt_visible_id_flag = false;
     //visible_idが変更されているかどうかの確認するためのflag
     let mut is_changed_visible_id_flag = false;
     //存在しないfield_nameがないか確認するためのflag
@@ -370,7 +373,7 @@ pub async fn update_item_put(
         .ok_or(AppError(anyhow::anyhow!("Parent Visible Id was not found")))?
         .ok_or(AppError(anyhow::anyhow!("Parent Visible Id was not found")))?;
     if new_parent_label_model.visible_id != old_parent_label_model.visible_id {
-        is_chnaged_parent_visible_id_flag = true;
+        is_chaged_parennt_visible_id_flag = true;
     }
     //* validation */
     //parent_visible_idがその物品の子孫の子になっていないかのチェック
@@ -467,6 +470,7 @@ pub async fn update_item_put(
                     .label_id;
                 children_item_labels_vec.push(label_id);
                 descendant_item_labels_vec.push(label_id);
+                //meilisearchの更新 (parent_visible_idを更新)
             }
             for grand_parent_label_id in grand_parent_label_junction_ids_vec.clone() {
                 let label_id = Item::find()
@@ -477,6 +481,7 @@ pub async fn update_item_put(
                     .label_id;
                 grandchild_item_labels_vec.push(label_id);
                 descendant_item_labels_vec.push(label_id);
+                //meilisearchの更新 (visible_idを更新)
             }
         }
         parent_label_junction_ids_vec = vec![];
@@ -506,7 +511,8 @@ pub async fn update_item_put(
         }
     }
     //parent_visible_idが変更されている場合の処理
-    if is_chnaged_parent_visible_id_flag {
+    if is_chaged_parennt_visible_id_flag {
+        //子物品・孫物品の更新
         for label_id in update_children_item_labels_vec.clone() {
             //parent_visible_idが変更されている場合の処理 (parent_visible_idとvisibleid、またはparent_visible_idのみが変更されている場合の処理)
             let item_model: item::Model = Item::find()
@@ -529,6 +535,27 @@ pub async fn update_item_put(
                 grand_parent_label_junction_model.into();
             grand_parent_label_junction_model.label_id = Set(new_parent_label_model.id);
             grand_parent_label_junction_model.update(&db).await?;
+            //meilisearchの更新
+            let url = format!("{}/indexes/item/documents/{}", meilisearch_url, id);
+            let mut meilisearch_item_data = reqwest_client
+                .get(&url)
+                .bearer_auth(&meilisearch_admin_api_key)
+                .send()
+                .await?
+                .json::<server::MeiliSearchItemData>()
+                .await?;
+            meilisearch_item_data.grand_parent_visible_id =
+                new_parent_label_model.visible_id.clone();
+            let item_meilisearch = meilisearch_client
+                .index("item")
+                .add_documents(&vec![meilisearch_item_data], Some("id"))
+                .await
+                .unwrap();
+            println!(
+                "[INFO]: update MeiliSearch data of a child item ({}) result:  {:#?}",
+                new_label_model.visible_id.clone(),
+                item_meilisearch
+            );
         }
         let parent_label_model = Label::find()
             .filter(label::Column::VisibleId.eq(&update_data.parent_visible_id))
@@ -579,15 +606,35 @@ pub async fn update_item_put(
                     .first()
                     .cloned()
                     .ok_or(AppError(anyhow::anyhow!(
-                        "Grand parent label junction model was not found"
+                        "Parent label junction model was not found"
                     )))?
                     .ok_or(AppError(anyhow::anyhow!(
-                        "Grand parent label junction model was not found"
+                        "Parent label junction model was not found"
                     )))?;
                 let mut parent_label_junction_model: parent_label_junction::ActiveModel =
                     parent_label_junction_model.into();
                 parent_label_junction_model.label_id = Set(new_label_model.id);
                 parent_label_junction_model.update(&db).await?;
+                //meilisearchの更新
+                let url = format!("{}/indexes/item/documents/{}", meilisearch_url, id);
+                let mut meilisearch_item_data = reqwest_client
+                    .get(&url)
+                    .bearer_auth(&meilisearch_admin_api_key)
+                    .send()
+                    .await?
+                    .json::<server::MeiliSearchItemData>()
+                    .await?;
+                meilisearch_item_data.parent_visible_id = new_parent_label_model.visible_id.clone();
+                let item_meilisearch = meilisearch_client
+                    .index("item")
+                    .add_documents(&vec![meilisearch_item_data], Some("id"))
+                    .await
+                    .unwrap();
+                println!(
+                    "[INFO]: update MeiliSearch data of a child item ({}) result:  {:#?}",
+                    new_label_model.visible_id.clone(),
+                    item_meilisearch
+                );
             }
             for label_id in update_grandchild_item_labels_vec.clone() {
                 let item_model: item::Model = Item::find()
@@ -610,6 +657,27 @@ pub async fn update_item_put(
                     grand_parent_label_junction_model.into();
                 grand_parent_label_junction_model.label_id = Set(new_label_model.id);
                 grand_parent_label_junction_model.update(&db).await?;
+                //meilisearchの更新
+                let url = format!("{}/indexes/item/documents/{}", meilisearch_url, id);
+                let mut meilisearch_item_data = reqwest_client
+                    .get(&url)
+                    .bearer_auth(&meilisearch_admin_api_key)
+                    .send()
+                    .await?
+                    .json::<server::MeiliSearchItemData>()
+                    .await?;
+                meilisearch_item_data.grand_parent_visible_id =
+                    new_parent_label_model.visible_id.clone();
+                let item_meilisearch = meilisearch_client
+                    .index("item")
+                    .add_documents(&vec![meilisearch_item_data], Some("id"))
+                    .await
+                    .unwrap();
+                println!(
+                    "[INFO]: update MeiliSearch data of a child item ({}) result:  {:#?}",
+                    new_label_model.visible_id.clone(),
+                    item_meilisearch
+                );
             }
             //update処理
             let mut update_item_model: item::ActiveModel = Item::find()
@@ -768,6 +836,26 @@ pub async fn update_item_put(
                 parent_label_junction_model.into();
             parent_label_junction_model.label_id = Set(new_label_model.id);
             parent_label_junction_model.update(&db).await?;
+            //meilisearchの更新
+            let url = format!("{}/indexes/item/documents/{}", meilisearch_url, id);
+            let mut meilisearch_item_data = reqwest_client
+                .get(&url)
+                .bearer_auth(&meilisearch_admin_api_key)
+                .send()
+                .await?
+                .json::<server::MeiliSearchItemData>()
+                .await?;
+            meilisearch_item_data.parent_visible_id = new_parent_label_model.visible_id.clone();
+            let item_meilisearch = meilisearch_client
+                .index("item")
+                .add_documents(&vec![meilisearch_item_data], Some("id"))
+                .await
+                .unwrap();
+            println!(
+                "[INFO]: update MeiliSearch data of a child item ({}) result:  {:#?}",
+                new_label_model.visible_id.clone(),
+                item_meilisearch
+            );
         }
         for label_id in update_grandchild_item_labels_vec.clone() {
             let item_model: item::Model = Item::find()
@@ -790,6 +878,27 @@ pub async fn update_item_put(
                 grand_parent_label_junction_model.into();
             grand_parent_label_junction_model.label_id = Set(new_label_model.id);
             grand_parent_label_junction_model.update(&db).await?;
+            //meilisearchの更新
+            let url = format!("{}/indexes/item/documents/{}", meilisearch_url, id);
+            let mut meilisearch_item_data = reqwest_client
+                .get(&url)
+                .bearer_auth(&meilisearch_admin_api_key)
+                .send()
+                .await?
+                .json::<server::MeiliSearchItemData>()
+                .await?;
+            meilisearch_item_data.grand_parent_visible_id =
+                new_parent_label_model.visible_id.clone();
+            let item_meilisearch = meilisearch_client
+                .index("item")
+                .add_documents(&vec![meilisearch_item_data], Some("id"))
+                .await
+                .unwrap();
+            println!(
+                "[INFO]: update MeiliSearch data of a child item ({}) result:  {:#?}",
+                new_label_model.visible_id.clone(),
+                item_meilisearch
+            );
         }
         //update処理
         let mut update_item_model: item::ActiveModel = Item::find()
@@ -922,7 +1031,7 @@ pub async fn update_item_put(
 //     mut multipart: Multipart,
 // ) -> Result<Json<server::MeiliSearchItemData>, AppError> {
 //     //parent_visible_idに変更があるかを確認するためのflag
-//     let mut is_chnaged_parent_visible_id_flag = false;
+//     let mut is_chaged_parennt_visible_id_flag = false;
 //     //visible_idが変更されているかどうかの確認するためのflag
 //     let mut is_changed_visible_id_flag = false;
 //     //存在しないfield_nameがないか確認するためのflag
@@ -1089,7 +1198,7 @@ pub async fn update_item_put(
 //             //ここで 3.1. のチェック
 //             if current_update_item_state.parent_visible_id != update_data.parent_visible_id {
 //                 //親物品ID: 変更
-//                 is_chnaged_parent_visible_id_flag = true;
+//                 is_chaged_parennt_visible_id_flag = true;
 //                 //3.2. 物品IDが物品IDを子孫に持つ全ての物品IDの子要素になっていないかのチェックをする
 //                 let mut descendants_items_vec: Vec<String> = Vec::new();
 //                 let mut count = 0;
@@ -1236,7 +1345,7 @@ pub async fn update_item_put(
 //             }
 //         }
 //         //親物品ID: 変更
-//         if is_chnaged_parent_visible_id_flag {
+//         if is_chaged_parennt_visible_id_flag {
 //             let children_items = Item::find()
 //                 .filter(item::Column::ParentVisibleId.eq(&current_update_item_state.visible_id))
 //                 .all(&db)
@@ -1324,6 +1433,12 @@ pub async fn update_item_put(
 //     }
 // }
 
+pub async fn register_item_post(
+    Extension(db): Extension<DatabaseConnection>,
+    mut multipart: Multipart,
+) -> Result<(), AppError> {
+
+}
 // pub async fn register_item_post(
 //     Extension(db): Extension<DatabaseConnection>,
 //     Extension(r2_url): Extension<String>,

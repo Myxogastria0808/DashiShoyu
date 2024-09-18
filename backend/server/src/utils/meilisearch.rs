@@ -20,3 +20,23 @@ pub async fn connect_meilisearch() -> Client {
     )
     .expect("Cannot connect to MeiliSearch")
 }
+
+pub async fn get_meilisearch_admin_api_key() -> String {
+    static ADMIN_API_KEY: OnceCell<String> = OnceCell::new();
+    dotenv().expect(".env file not found.");
+    let _ = ADMIN_API_KEY.set(env::var("ADMIN_API_KEY").expect("KEY not found in .env file."));
+    ADMIN_API_KEY
+        .get()
+        .expect("Failed to get ADMIN_API_KEY")
+        .to_string()
+}
+
+pub async fn get_meilisearch_url() -> String {
+    static MEILI_URL: OnceCell<String> = OnceCell::new();
+    dotenv().expect(".env file not found.");
+    let _ = MEILI_URL.set(env::var("MEILI_URL").expect("KEY not found in .env file."));
+    MEILI_URL
+        .get()
+        .expect("Failed to get MEILI_URL")
+        .to_string()
+}

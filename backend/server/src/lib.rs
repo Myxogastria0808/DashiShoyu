@@ -12,6 +12,8 @@ pub use utils::r2::upload_image_file;
 pub use utils::image::convert_to_webp;
 //meilisearch
 pub use utils::meilisearch::connect_meilisearch;
+pub use utils::meilisearch::get_meilisearch_admin_api_key;
+pub use utils::meilisearch::get_meilisearch_url;
 
 //model
 mod models;
