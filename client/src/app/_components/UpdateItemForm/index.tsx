@@ -43,7 +43,6 @@ const UpdateItemForm = (props: {
   });
   const onSubmit: SubmitHandler<UpdateItemFormSchemaType> = async (data) => {
     //空の文字列を削除
-    console.log("hello");
     const result_connector: { connector: string }[] = [];
     data.connector.map((connector, _index) => {
       if (connector.connector !== "") {
@@ -78,7 +77,8 @@ const UpdateItemForm = (props: {
     });
     const url: string = `http://localhost:5000/api/item/update/${props.item.id}`;
     try {
-      await ky.put(url, { body: formData });
+      let result = await ky.put(url, { body: formData });
+      console.log(result);
     } catch (error) {
       throw new Error(`物品情報の更新に失敗しました。\n${error}`);
     }

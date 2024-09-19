@@ -1437,7 +1437,111 @@ pub async fn register_item_post(
     Extension(db): Extension<DatabaseConnection>,
     mut multipart: Multipart,
 ) -> Result<(), AppError> {
+    //parent_visible_idに変更があるかを確認するためのflag
+    let mut is_chaged_parennt_visible_id_flag = false;
+    //存在しないfield_nameがないか確認するためのflag
+    let mut have_invalid_field_name_flag = false;
+    //connectorのvector
+    let mut result_connector_vec: Vec<String> = Vec::new();
+    let mut update_data = server::ControlItemData {
+        visible_id: "".to_string(),
+        parent_visible_id: "".to_string(),
+        name: "".to_string(),
+        product_number: "".to_string(),
+        record: Record::Qr,
+        description: "".to_string(),
+        year_purchased: None,
+        connector: json!(result_connector_vec),
+    };
+    while let Some(field) = multipart.next_field().await? {
+        let field_name = field.name().unwrap().to_string();
+        println!("field name: {}", field_name);
+        //connector
+        if field_name.starts_with("connector") {
+            let connector = field.text().await?;
+            println!("connector: {}", connector);
+            result_connector_vec.push(connector);
+            continue;
+        }
+        match field_name.as_str() {
+            "visible_id" => {
+                let visible_id = field.text().await?;
+                println!("visible_id: {}", visible_id);
+                //とりあえず格納する
+                update_data.visible_id = visible_id;
+            }
+            "parent_visible_id" => {
+                let parent_id = field.text().await?;
+                println!("parent_visible_id: {}", parent_id);
+                //とりあえず格納する
+                update_data.parent_visible_id = parent_id;
+            }
+            "name" => {
+                let name = field.text().await?;
+                println!("name: {}", name);
+                update_data.name = name;
+            }
+            "product_number" => {
+                let product_number = field.text().await?;
+                println!("product_number: {}", product_number);
+                update_data.product_number = product_number;
+            }
+            "record" => {
+                let record = field.text().await?;
+                println!("record: {}", record);
+                //Recordに不正な値が入っている場合の早期リターン
+                if record != "Qr" && record != "Barcode" && record != "Nothing" {
+                    return Err(AppError(anyhow::anyhow!(
+                        "Record type '{}' is invalid",
+                        record
+                    )));
+                }
+                update_data.record = match record.as_str() {
+                    "Qr" => Record::Qr,
+                    "Barcode" => Record::Barcode,
+                    "Nothing" => Record::Nothing,
+                    _ => panic!("Record type validation was failed"),
+                };
+            }
+            "description" => {
+                let description = field.text().await?;
+                println!("description: {}", description);
+                update_data.description = description;
+            }
+            "year_purchased" => {
+                let year_purchased = field.text().await?;
+                println!("year_purchased: {}", year_purchased);
+                if year_purchased.is_empty() {
+                    update_data.year_purchased = None;
+                } else {
+                    update_data.year_purchased = Some(year_purchased.parse::<i32>()?);
+                }
+            }
+            _ => {
+                println!("other");
+                have_invalid_field_name_flag = true;
+            }
+        }
+    }
+    //存在しないfieldを取得した場合の早期リターン
+    if have_invalid_field_name_flag {
+        return Err(AppError(anyhow::anyhow!("Invalid field name")));
+    }
+    //parent_visible_idの存在と物品IDとして利用されているかのバリデーション
+    let parent_label_model = Label::find()
+        .filter(label::Column::VisibleId.eq(&update_data.parent_visible_id))
+        .one(&db)
+        .await?
+        .ok_or(AppError(anyhow::anyhow!(
+            "Parent label model was not found"
+        )))?;
+    let parent_item = Item::find()
+        .filter(item::Column::LabelId.eq(parent_label_model.id))
+        .one(&db)
+        .await?
+        .ok_or(AppError(anyhow::anyhow!("Parent item was not found")))?;
 
+    Ok(())
 }
 // pub async fn register_item_post(
 //     Extension(db): Extension<DatabaseConnection>,
