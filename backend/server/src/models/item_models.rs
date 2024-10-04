@@ -8,7 +8,6 @@ pub struct MeiliSearchItemData {
     pub id: i32,
     pub visible_id: String,
     pub parent_visible_id: String,
-    pub grand_parent_visible_id: String,
     pub name: String,
     pub product_number: String,
     pub photo_url: String,
