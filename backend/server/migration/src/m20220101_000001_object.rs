@@ -14,9 +14,9 @@ impl MigrationTrait for Migration {
                     .col(
                         ColumnDef::new(Object::Id)
                             .integer()
-                            .not_null()
+                            .primary_key()
                             .auto_increment()
-                            .primary_key(),
+                            .not_null(),
                     )
                     .col(ColumnDef::new(Object::Name).string().not_null())
                     .col(

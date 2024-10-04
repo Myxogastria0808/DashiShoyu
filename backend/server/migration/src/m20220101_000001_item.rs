@@ -1,6 +1,4 @@
-use crate::m20220101_000001_grand_parent_label_junction::GrandParentLabelJunction;
 use crate::m20220101_000001_label::Label;
-use crate::m20220101_000001_parent_label_junction::ParentLabelJunction;
 use sea_orm_migration::prelude::*;
 
 #[derive(DeriveMigrationName)]
@@ -22,46 +20,24 @@ impl MigrationTrait for Migration {
                             .primary_key(),
                     )
                     .col(
-                        ColumnDef::new(Item::LabelId)
-                            .integer()
+                        ColumnDef::new(Item::VisibleId)
+                            .string()
                             .unique_key()
                             .not_null(),
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .from(Item::Table, Item::LabelId)
-                            .to(Label::Table, Label::Id),
-                    )
-                    .col(ColumnDef::new(Item::ParentId).integer().not_null())
-                    .col(
-                        ColumnDef::new(Item::ParentLabelId)
-                            .integer()
-                            .unique_key()
-                            .not_null(),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(Item::Table, Item::ParentLabelId)
-                            .to(ParentLabelJunction::Table, ParentLabelJunction::Id),
-                    )
-                    .col(ColumnDef::new(Item::GrandParentId).integer().not_null())
-                    .col(
-                        ColumnDef::new(Item::GrandParentLabelId)
-                            .integer()
-                            .unique_key()
-                            .not_null(),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(Item::Table, Item::GrandParentLabelId)
-                            .to(
-                                GrandParentLabelJunction::Table,
-                                GrandParentLabelJunction::Id,
-                            ),
+                            .from(Item::Table, Item::VisibleId)
+                            .to(Label::Table, Label::VisibleId),
                     )
                     .col(ColumnDef::new(Item::Name).string().not_null())
                     .col(ColumnDef::new(Item::ProductNumber).string().not_null())
-                    .col(ColumnDef::new(Item::PhotoUrl).string().not_null())
+                    .col(
+                        ColumnDef::new(Item::PhotoUrl)
+                            .string()
+                            .unique_key()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(Item::Record).string().not_null())
                     .col(ColumnDef::new(Item::Description).string().not_null())
                     .col(ColumnDef::new(Item::YearPurchased).integer())
@@ -84,11 +60,7 @@ impl MigrationTrait for Migration {
 enum Item {
     Table,
     Id,
-    LabelId,
-    ParentId,
-    ParentLabelId,
-    GrandParentId,
-    GrandParentLabelId,
+    VisibleId,
     Name,
     ProductNumber,
     PhotoUrl,

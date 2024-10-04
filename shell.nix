@@ -7,14 +7,18 @@ in pkgs.mkShell {
   buildInputs = with pkgs; [
     pkg-config
     openssl
-    jq
-    sea-orm-cli
     #next.js
-    nodejs_21
-    corepack_21
-
+    nodejs_22
+    corepack_22
+    #backend
+    sea-orm-cli
+    jq
+    httpie
+    #docker
+    docker
+    docker-compose
     (rustChannelOf {
-      rustToolchain = ./server/rust-toolchain.toml;
+      rustToolchain = ./backend/server/rust-toolchain.toml;
     }).rust
 
     (rustChannelOf {

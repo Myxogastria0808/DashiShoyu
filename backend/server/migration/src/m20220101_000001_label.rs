@@ -12,16 +12,9 @@ impl MigrationTrait for Migration {
                     .table(Label::Table)
                     .if_not_exists()
                     .col(
-                        ColumnDef::new(Label::Id)
-                            .integer()
-                            .not_null()
-                            .auto_increment()
-                            .primary_key(),
-                    )
-                    .col(
                         ColumnDef::new(Label::VisibleId)
                             .string()
-                            .unique_key()
+                            .primary_key()
                             .not_null(),
                     )
                     .col(ColumnDef::new(Label::Color).string().not_null())
@@ -39,7 +32,6 @@ impl MigrationTrait for Migration {
 #[derive(DeriveIden)]
 pub enum Label {
     Table,
-    Id,
     VisibleId,
     Color,
 }

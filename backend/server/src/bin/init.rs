@@ -1,8 +1,6 @@
 use ::entity::{
-    grand_parent_label_junction::{self, Entity as GrandParentLabelJunction},
     item::{self, Entity as Item, Record},
     label::{self, Color, Entity as Label},
-    parent_label_junction::{self, Entity as ParentLabelJunction},
 };
 use chrono::Utc;
 use csv::Error;
@@ -38,24 +36,6 @@ struct CsvItemData {
     connector_5: Option<String>,
     #[serde(deserialize_with = "csv::invalid_option")]
     connector_6: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct ItemData {
-    visible_id: String,
-    parent_visible_id: String,
-    grand_parent_visible_id: String,
-    name: String,
-    product_number: String,
-    photo_url: String,
-    //Record
-    record: Record,
-    //Color
-    color: Color,
-    description: String,
-    year_purchased: Option<i32>,
-    //serde_json::Value
-    connector: Vec<String>,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -98,12 +78,6 @@ async fn convert_to_item_data(data: Vec<CsvItemData>) -> Result<Vec<ItemData>, B
     let data = data
         .into_iter()
         .map(|item| ItemData {
-            grand_parent_visible_id: match hash_map.get(&item.parent_visible_id) {
-                Some(s) => s.to_owned(),
-                None => {
-                    panic!("Parent is not found: {}", item.visible_id)
-                }
-            },
             visible_id: item.visible_id.clone(),
             parent_visible_id: item.parent_visible_id,
             name: item.name,
@@ -162,7 +136,6 @@ async fn convert_to_item_data(data: Vec<CsvItemData>) -> Result<Vec<ItemData>, B
     }
     for (index, item) in data.iter().enumerate() {
         let item_data = ItemData {
-            grand_parent_visible_id: item.grand_parent_visible_id.clone(),
             visible_id: item.visible_id.clone(),
             parent_visible_id: item.parent_visible_id.clone(),
             name: item.name.clone(),
@@ -185,19 +158,7 @@ async fn make_item_data() -> Result<Vec<ItemData>, Box<Error>> {
     Ok(data)
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct VisibleIds {
-    id: i32,
-    visible_id: String,
-    label_id: i32,
-    parent_visible_id: String,
-    parent_label_id: i32,
-    parent_label_junction_id: i32,
-    grand_parent_visible_id: String,
-    grand_parent_label_id: i32,
-    grand_parent_label_junction_id: i32,
-}
-
+//////////////////////////////////////////////////////////////////////////////////////
 async fn insert_item_data_to_db(data: Vec<ItemData>) -> Result<(), DbErr> {
     //connect db
     let db: DatabaseConnection = server::connect_db().await?;

@@ -189,18 +189,10 @@ cargo run --bin init ./src/bin/data/sample.csv
 
 ```mermaid
 erDiagram
-    Item ||--|| ParentLabelJunction : "parent_visible_id"
-    Item ||--|| GrandParentLabelJunction : "grand_parent_visible_id"
-    ParentLabelJunction }o--|| Label : "label_id"
-    GrandParentLabelJunction }o--|| Label : "label_id"
-    Item |o--|| Label : "visible_id color"
+    Item ||--o| Label : "visible_id color"
     Item {
         i32 Id PK "autoincrement"
-        i32 LabelId FK, UK "実際の物品ID Label Tableとリレーションを貼っている"
-        i32 ParentId "DB上の親物品ID"
-        String ParentLabelJunctionId FK, UK "実際の親物品ID ParentLabelJunction Tableとリレーションを貼っている"
-        i32 GrandParentId "DB上の親の親物品ID"
-        String GrandParentLabelJunctionId FK, UK "実際の親の親物品ID GrandParentLabelJunction Tableとリレーションを貼っている"
+        String VisibleId UK, FK "Labelテーブルとリレーションを張っている"
         String Name
         String ProductNumber "型番 (わからない or 存在しない場合は、空の文字列)"
         String PhotoUrl UK "Cloudflare R2に画像を格納する ファイル名は、{Id}.webp"
@@ -211,17 +203,8 @@ erDiagram
         datetime CreatedAt "登録したときの日時"
         datetime UpdatedAt "更新したときの日時"
     }
-    ParentLabelJunction {
-        i32 Id PK "autoincrement"
-        i32 LabelId FK "Label Tableとリレーションを貼っている"
-    }
-    GrandParentLabelJunction {
-        i32 Id PK "autoincrement"
-        i32 LabelId FK "Label Tableとリレーションを貼っている"
-    }
     Label {
-        i32 Id PK "autoincrement"
-        String VisibleId UK "実際の物品ID"
+        String VisibleId PK "実際の物品ID"
         Color Color "enum {Red, Orange, Brown, SkyBlue、Blue, Green, Yellow, Purple, Pink} (ActiveEnum)"
     }
 
@@ -246,18 +229,10 @@ erDiagram
 erDiagram
     Item ||--o{ Transaction : transaction
     Transaction }o--|{ User : user
-    Item ||--|| ParentLabelJunction : "parent_visible_id"
-    Item ||--|| GrandParentLabelJunction : "grand_parent_visible_id"
-    ParentLabelJunction }o--|| Label : "label_id"
-    GrandParentLabelJunction }o--|| Label : "label_id"
-    Item |o--|| Label : "visible_id color"
+    Item ||--o| Label : "visible_id color"
     Item {
         i32 Id PK "autoincrement"
-        i32 LabelId FK, UK "実際の物品ID Label Tableとリレーションを貼っている"
-        i32 ParentId "DB上の親物品ID"
-        String ParentLabelJunctionId FK, UK "実際の親物品ID ParentLabelJunction Tableとリレーションを貼っている"
-        i32 GrandParentId "DB上の親の親物品ID"
-        String GrandParentLabelJunctionId FK, UK "実際の親の親物品ID GrandParentLabelJunction Tableとリレーションを貼っている"
+        String VisibleId UK, FK "Labelテーブルとリレーションを張っている"
         String Name
         String ProductNumber "型番 (わからない or 存在しない場合は、空の文字列)"
         String PhotoUrl UK "Cloudflare R2に画像を格納する ファイル名は、{Id}.webp"
@@ -268,19 +243,8 @@ erDiagram
         datetime CreatedAt "登録したときの日時"
         datetime UpdatedAt "更新したときの日時"
     }
-    ParentLabelJunction {
-        i32 Id PK "autoincrement"
-        i32 ItemId FK, UK "Item Tableとリレーションを貼っている"
-        i32 LabelId FK "Label Tableとリレーションを貼っている"
-    }
-    GrandParentLabelJunction {
-        i32 Id PK "autoincrement"
-        i32 ItemId FK, UK "Item Tableとリレーションを貼っている"
-        i32 LabelId FK "Label Tableとリレーションを貼っている"
-    }
     Label {
-        i32 Id PK "autoincrement"
-        String VisibleId UK "実際の物品ID"
+        String VisibleId PK "実際の物品ID"
         Color Color "enum {Red, Orange, Brown, SkyBlue、Blue, Green, Yellow, Purple, Pink} (ActiveEnum)"
     }
     Transaction {
