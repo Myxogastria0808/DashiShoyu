@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2021"
 
 [workspace]
-members = [".", "entity", "hello", "migration"]
+members = ["entity", "migration"]
 
 [dependencies]
 tokio = { version = "1.39.2", features = ["full"] }

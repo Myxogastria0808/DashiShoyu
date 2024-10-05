@@ -1,14 +1,13 @@
 use ::entity::{
-    grand_parent_label_junction::{self, Entity as GrandParentLabelJunction},
     item::{self, Entity as Item, Record},
     label::{self, Entity as Label},
-    parent_label_junction::{self, Entity as ParentLabelJunction},
 };
 use axum::{
     extract::{Multipart, Path, Query},
     Extension, Json,
 };
 use chrono::Utc;
+use neo4rs::Graph;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, LoaderTrait, QueryFilter, Set,
 };
@@ -43,180 +42,37 @@ pub async fn search_item_get(
 pub async fn get_each_item_get(
     Path(id): Path<i32>,
     Extension(db): Extension<DatabaseConnection>,
+    Extension(graph): Extension<Graph>,
 ) -> Result<Json<server::ItemData>, AppError> {
-    let item_model = Item::find_by_id(id)
-        .one(&db)
-        .await?
-        .ok_or(AppError(anyhow::anyhow!("Item not found in Item Table")))?;
-    //visible_id
-    let label_model: label::Model = Label::find_by_id(item_model.label_id)
-        .one(&db)
-        .await?
-        .ok_or(AppError(anyhow::anyhow!(
-            "Item was not found in Label Table."
-        )))?;
-
-    let parent_label_junction_model: parent_label_junction::Model =
-        ParentLabelJunction::find_by_id(item_model.parent_label_id)
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!(
-                "Parent item was not found in Parent Label Junction Table."
-            )))?;
-    //parent_visible_id
-    let parent_label_model: label::Model = Label::find_by_id(parent_label_junction_model.label_id)
-        .one(&db)
-        .await?
-        .ok_or(AppError(anyhow::anyhow!(
-            "Parent item was not found in Label Table"
-        )))?;
-
-    let grand_parent_label_junction_model: grand_parent_label_junction::Model =
-        GrandParentLabelJunction::find_by_id(item_model.grand_parent_label_id)
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!(
-                "Item was not found in Grand Parent Label Junction Table."
-            )))?;
-    //grand_parent_visible_id
-    let grand_parent_label_model: label::Model =
-        Label::find_by_id(grand_parent_label_junction_model.label_id)
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!(
-                "Item was not found in Label Table."
-            )))?;
-
-    //get item path
-    let mut path_item_name: Vec<String> = Vec::new();
-    let mut path: Vec<String> = Vec::new();
-    let mut current_item = label_model.visible_id.clone();
-    let mut parent_item = parent_label_model.visible_id.clone();
-    loop {
-        if label_model.visible_id == parent_label_model.visible_id {
-            //ルートのitemの場合
-            path.push(label_model.visible_id.clone());
-            let item_model = Item::find()
-                .filter(item::Column::LabelId.eq(label_model.id))
-                .one(&db)
-                .await?
-                .ok_or(AppError(anyhow::anyhow!(
-                    "Item was not found in Item Table."
-                )))?;
-            path_item_name.push(item_model.name.clone());
-            break;
-        } else if parent_label_model.visible_id == grand_parent_label_model.visible_id {
-            //親がルートの場合
-            path.push(label_model.visible_id.clone());
-            path.push(parent_label_model.visible_id.clone());
-            let item_model = Item::find()
-                .filter(item::Column::LabelId.eq(label_model.id))
-                .one(&db)
-                .await?
-                .ok_or(AppError(anyhow::anyhow!(
-                    "Item was not found in Item Table."
-                )))?;
-            path_item_name.push(item_model.name.clone());
-            let parent_item_model = Item::find()
-                .filter(item::Column::LabelId.eq(parent_label_model.id))
-                .one(&db)
-                .await?
-                .ok_or(AppError(anyhow::anyhow!(
-                    "Item was not found in Item Table."
-                )))?;
-            path_item_name.push(parent_item_model.name.clone());
-            break;
-        } else if current_item == parent_item {
-            //それ以外の場合の終了条件
-            let current_item_label_model: label::Model = Label::find()
-                .filter(label::Column::VisibleId.eq(&current_item))
-                .one(&db)
-                .await?
-                .ok_or(AppError(anyhow::anyhow!(
-                    "Item was not found in Item Table."
-                )))?;
-            let current_item_model: item::Model = Item::find()
-                .filter(item::Column::LabelId.eq(current_item_label_model.id))
-                .one(&db)
-                .await?
-                .ok_or(AppError(anyhow::anyhow!(
-                    "Item was not found in Item Table."
-                )))?;
-            path_item_name.push(current_item_model.name.clone());
-            path.push(current_item);
-            break;
-        }
-        let current_item_label_model: label::Model = Label::find()
-            .filter(label::Column::VisibleId.eq(&current_item))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!(
-                "Item was not found in Item Table."
-            )))?;
-        let current_item_model: item::Model = Item::find()
-            .filter(item::Column::LabelId.eq(current_item_label_model.id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!(
-                "Item was not found in Item Table."
-            )))?;
-        path_item_name.push(current_item_model.name.clone());
-        path.push(current_item);
-        // current_item, parent_itemの更新
-        //current_itemの更新
-        current_item = parent_item.clone();
-        //parent_current_itemの更新
-        let old_parent_label_model: label::Model = Label::find()
-            .filter(label::Column::VisibleId.eq(&parent_item))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!(
-                "Item was not found in Label Table."
-            )))?;
-        let old_parent_item_model: item::Model = Item::find()
-            .filter(item::Column::LabelId.eq(old_parent_label_model.id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!(
-                "Item was not found in Item Table."
-            )))?;
-        let new_parent_label_junction_model: parent_label_junction::Model =
-            ParentLabelJunction::find()
-                .filter(parent_label_junction::Column::Id.eq(old_parent_item_model.parent_label_id))
-                .one(&db)
-                .await?
-                .ok_or(AppError(anyhow::anyhow!(
-                    "Item was not found in Parent Label Junction Table."
-                )))?;
-        let new_parent_label_model: label::Model = Label::find()
-            .filter(label::Column::Id.eq(new_parent_label_junction_model.label_id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!(
-                "Item was not found in Label Table."
-            )))?;
-        parent_item = new_parent_label_model.visible_id.clone();
+    let item_model = Item::find().filter(item::Column::Id.eq(id)).one(&db).await?.ok_or(AppError(anyhow::anyhow!("Item was not found.")))?;
+    let path = server::search_path(graph, item_model.id.into()).await?;
+    let parent_item_model = Item::find().filter(item::Column::Id.eq(path[1])).one(&db).await?.ok_or(AppError(anyhow::anyhow!("Parent item was not found.")))?;
+    let parent_label_model = Label::find().filter(label::Column::VisibleId.eq(parent_item_model.visible_id.clone())).one(&db).await?.ok_or(AppError(anyhow::anyhow!("Parent label was not found.")))?;
+    let mut item_name_path: Vec<String> = Vec::new();
+    let mut visible_id_path: Vec<String> = Vec::new();
+    for id in &path {
+        let item_path_model = Item::find().filter(item::Column::Id.eq(*id)).one(&db).await?.ok_or(AppError(anyhow::anyhow!("Parent item was not found.")))?;
+        item_name_path.push(item_path_model.name);
+        visible_id_path.push(item_path_model.visible_id);
     }
-
     let item = server::ItemData {
         id: item_model.id,
-        visible_id: label_model.visible_id,
-        parent_visible_id: parent_label_model.visible_id,
-        grand_parent_visible_id: grand_parent_label_model.visible_id,
+        visible_id: item_model.visible_id,
+        parent_visible_id: parent_item_model.visible_id,
         name: item_model.name,
         product_number: item_model.product_number,
         photo_url: item_model.photo_url,
         record: item_model.record,
-        color: label_model.color,
+        color: parent_label_model.color,
         description: item_model.description,
         year_purchased: item_model.year_purchased,
         connector: item_model.connector,
         created_at: item_model.created_at,
         updated_at: item_model.updated_at,
-        path: json!(path),
-        path_item_name: json!(path_item_name),
+        path,
+        visible_id_path,
+        item_name_path,
     };
-
     Ok(Json(item))
 }
 

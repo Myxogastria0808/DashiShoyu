@@ -26,7 +26,7 @@ pub enum Color {
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub visible_id: String,
-    pub color: String,
+    pub color: Color,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

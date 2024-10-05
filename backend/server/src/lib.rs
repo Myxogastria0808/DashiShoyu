@@ -14,6 +14,9 @@ pub use utils::image::convert_to_webp;
 pub use utils::meilisearch::connect_meilisearch;
 pub use utils::meilisearch::get_meilisearch_admin_api_key;
 pub use utils::meilisearch::get_meilisearch_url;
+//neo4j
+pub use utils::neo4j::connect_neo4j;
+pub use utils::neo4j::search_path;
 
 //model
 mod models;

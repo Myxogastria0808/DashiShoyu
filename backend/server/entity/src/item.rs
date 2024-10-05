@@ -28,7 +28,7 @@ pub struct Model {
     pub product_number: String,
     #[sea_orm(unique)]
     pub photo_url: String,
-    pub record: String,
+    pub record: Record,
     pub description: String,
     pub year_purchased: Option<i32>,
     pub connector: Json,

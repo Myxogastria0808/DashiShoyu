@@ -31,6 +31,8 @@ async fn api() -> Result<(), DbErr> {
     let meilisearch_admin_api_key: String = server::get_meilisearch_admin_api_key().await;
     //meilisearch_url
     let meilisearch_url: String = server::get_meilisearch_url().await;
+    //connect neo4j
+    let graph: neo4rs::Graph = server::connect_neo4j().await;
     //CORS
     let cors: CorsLayer = CorsLayer::new()
         .allow_methods([Method::POST, Method::GET, Method::DELETE, Method::PUT])
@@ -45,6 +47,7 @@ async fn api() -> Result<(), DbErr> {
         .layer(Extension(reqwest_client))
         .layer(Extension(meilisearch_admin_api_key))
         .layer(Extension(meilisearch_url))
+        .layer(Extension(graph))
         .layer(cors)
         .layer(DefaultBodyLimit::max(1024 * 1024 * 100));
     //Server
