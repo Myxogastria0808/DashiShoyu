@@ -9,7 +9,7 @@ members = ["entity", "migration"]
 [dependencies]
 tokio = { version = "1.39.2", features = ["full"] }
 #axum
-axum = {version = "0.7.5", features = ["multipart", "macros"] }
+axum = {version = "0.7.5", features = ["macros"] }
 tower-http = { version = "0.5.2", features = ["cors"] }
 anyhow = "1.0.86"
 #.env
@@ -31,7 +31,10 @@ image = "0.25.2"
 webp = "0.3.0"
 #meilisearch
 meilisearch-sdk = "0.27.1"
-#meilisearchのAPI叩く用のHTTP Client
-reqwest = {version="0.12.7", features = ["json"]}
 #neo4j
 neo4rs = "0.8.0"
+#others
+uuid = "1.10.0"
+rand = "0.8.5"
+utoipa = { version = "4.2.3", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "7.1.0", features = ["axum"] }

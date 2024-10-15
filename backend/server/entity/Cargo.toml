@@ -14,3 +14,4 @@ features = [ "macros" ]
 
 [dependencies]
 serde = { version="1.0.209", features=["derive"] }
+utoipa = { version = "4.2.3", features = ["axum_extras"] }

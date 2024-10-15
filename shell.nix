@@ -12,18 +12,21 @@ in pkgs.mkShell {
     corepack_22
     #backend
     sea-orm-cli
+    cargo-watch
     jq
     httpie
     #docker
     docker
     docker-compose
+
     (rustChannelOf {
       rustToolchain = ./backend/server/rust-toolchain.toml;
     }).rust
 
     (rustChannelOf {
-      version = "1.80.0";
+      version = "1.81.0";
       channel = "stable";
     }).rust
   ];
+  RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
 }

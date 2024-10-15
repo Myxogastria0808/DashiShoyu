@@ -5,3 +5,5 @@ pub mod prelude;
 pub mod item;
 pub mod label;
 pub mod object;
+pub mod object_tag_junction;
+pub mod tag;

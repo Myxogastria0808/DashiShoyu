@@ -12,7 +12,7 @@ const SearchItem = () => {
     const inputValue: string | undefined = searchItemElement.current?.value;
     if (!inputValue) return;
     //複数回繰り返しスペースがある場合の修正をする
-    const inputReplaceBlankValue = inputValue.replace(/\s+/g, "+");
+    const inputReplaceBlankValue = inputValue.replace(/\s+/g, "%20");
     const url = `http://localhost:5000/api/item/search?keywords=${inputReplaceBlankValue}`;
     try {
       const result: ItemDataType[] = await ky.get(url).json();

@@ -1,16 +1,7 @@
-use ::entity::{
-    item::{self, Entity as Item, Record},
-    label::{self, Color, Entity as Label},
-};
-use axum::{
-    extract::{Multipart, Path, Query},
-    Extension, Json,
-};
-use chrono::Utc;
-use cloudflare_r2_rs::r2::R2Manager;
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use ::entity::label::{self, Color, Entity as Label};
+use axum::{Extension, Json};
+use sea_orm::{DatabaseConnection, EntityTrait, Set};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use server::AppError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,7 +13,7 @@ pub struct LabelModelData {
 pub async fn regiter_visible_id_post(
     Extension(db): Extension<DatabaseConnection>,
     label_model_data: Json<LabelModelData>,
-) -> Result<(), AppError> {
+) -> Result<Json<label::Model>, AppError> {
     let _color_error_flag = false;
     let mut result_color = Color::Red;
     match label_model_data.color.as_str() {
@@ -63,12 +54,15 @@ pub async fn regiter_visible_id_post(
     let label_model = label::ActiveModel {
         visible_id: Set(label_model_data.visible_id.clone()),
         color: Set(result_color),
-        ..Default::default()
     };
     let inserted_label_data = Label::insert(label_model).exec(&db).await?;
     println!(
         "[INFO]: Register Visible Id Result (admin end point): {:#?}",
         inserted_label_data
     );
-    Ok(())
+    let label_model = Label::find_by_id(inserted_label_data.last_insert_id)
+        .one(&db)
+        .await?
+        .ok_or(AppError(anyhow::anyhow!("Label was not found.")))?;
+    Ok(Json(label_model))
 }

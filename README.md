@@ -208,16 +208,26 @@ erDiagram
         Color Color "enum {Red, Orange, Brown, SkyBlue、Blue, Green, Yellow, Purple, Pink} (ActiveEnum)"
     }
 
+    Object |o--|{ ObjectTagJunction : "tag"
+    ObjectTagJunction }|--|| Tag : "tag"
     Object {
         i32 Id PK "autoincrement"
         String Name
         String PhotoUrl UK "Cloudflare R2に画像を格納する ファイル名は obj-{Id}.{各拡張子 MimeTypesから推測}"
         String MimeTypes
         String License
-        Json Tag "e.g. ['わいわい', '楽しい場面'] (可変の配列)"
         String Description "補足説明 (空の文字列を許容する)"
         datetime CreatedAt "登録したときの日時"
         datetime UpdatedAt "更新したときの日時"
+    }
+    ObjectTagJunction {
+        i32 Id PK "autoincrement"
+        i32 ObjectId FK "Object Tableとリレーションを貼っている"
+        i32 TagId FK "Tag Tableとリレーションを貼っている"
+    }
+    Tag {
+        i32 Id PK "autoincrement"
+        String name UK
     }
 ```
 
@@ -260,15 +270,25 @@ erDiagram
         String uid UK
     }
 
+    Object |o--|{ ObjectTagJunction : "tag"
+    ObjectTagJunction }|--|| Tag : "tag"
     Object {
         i32 Id PK "autoincrement"
         String Name
         String PhotoUrl UK "Cloudflare R2に画像を格納する ファイル名は obj-{Id}.{各拡張子 MimeTypesから推測}"
         String MimeTypes
         String License
-        Json Tag "e.g. ['わいわい', '楽しい場面'] (可変の配列)"
         String Description "補足説明 (空の文字列を許容する)"
         datetime CreatedAt "登録したときの日時"
         datetime UpdatedAt "更新したときの日時"
+    }
+    ObjectTagJunction {
+        i32 Id PK "autoincrement"
+        i32 ObjectId FK "Object Tableとリレーションを貼っている"
+        i32 TagId FK "Tag Tableとリレーションを貼っている"
+    }
+    Tag {
+        i32 Id PK "autoincrement"
+        String name UK
     }
 ```

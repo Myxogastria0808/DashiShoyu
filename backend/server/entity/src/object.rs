@@ -12,13 +12,21 @@ pub struct Model {
     pub photo_url: String,
     pub mime_type: String,
     pub license: String,
-    pub tag: Json,
     pub description: String,
     pub created_at: DateTime,
     pub updated_at: DateTime,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    #[sea_orm(has_many = "super::object_tag_junction::Entity")]
+    ObjectTagJunction,
+}
+
+impl Related<super::object_tag_junction::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ObjectTagJunction.def()
+    }
+}
 
 impl ActiveModelBehavior for ActiveModel {}

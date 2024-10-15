@@ -1,3 +1,10 @@
 {
-    "nixEnvSelector.nixFile": "${workspaceFolder}/shell.nix"
+    "nixEnvSelector.nixFile": "${workspaceFolder}/shell.nix",
+    "rust-analyzer.linkedProjects": [
+        "${workspaceFolder}/backend/server/Cargo.toml"
+    ],
+    "editor.formatOnSave": true,
+    "[rust]": {
+        "editor.defaultFormatter": "rust-lang.rust-analyzer"
+    }
 }

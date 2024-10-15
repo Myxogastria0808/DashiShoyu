@@ -6,6 +6,8 @@ use once_cell::sync::OnceCell;
 use sea_orm::{self, DatabaseConnection, DbErr};
 use std::env;
 use tower_http::cors::{Any, CorsLayer};
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 mod handlers;
 mod routes;
@@ -26,7 +28,7 @@ async fn api() -> Result<(), DbErr> {
     // MeiliSearch
     let meilisearch_client: meilisearch_sdk::client::Client = server::connect_meilisearch().await;
     // requwest
-    let reqwest_client: reqwest::Client = reqwest::Client::new();
+    //let reqwest_client: reqwest::Client = reqwest::Client::new();
     //meilisearch_admin_api_key
     let meilisearch_admin_api_key: String = server::get_meilisearch_admin_api_key().await;
     //meilisearch_url
@@ -40,11 +42,11 @@ async fn api() -> Result<(), DbErr> {
     //Router
     let app = Router::new()
         .merge(index::root_routes().await)
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .layer(Extension(db))
         .layer(Extension(r2_manager))
         .layer(Extension(r2_url))
         .layer(Extension(meilisearch_client))
-        .layer(Extension(reqwest_client))
         .layer(Extension(meilisearch_admin_api_key))
         .layer(Extension(meilisearch_url))
         .layer(Extension(graph))
@@ -61,3 +63,47 @@ async fn api() -> Result<(), DbErr> {
     axum::serve(listener, app).await.unwrap();
     Ok(())
 }
+
+#[derive(OpenApi)]
+#[openapi(
+    info(title = "DashiShoyu"),
+    servers((url = "http://localhost:3000")),
+    tags(
+        (name = "Health Check", description = "Health Checkのエンドポイント"),
+        (name = "Item", description = "物品に関係するエンドポイント"),
+        (name = "Object", description = "オブジェクトに関係するエンドポイント"),
+    ),
+    paths(
+        handlers::health_check_handler::health_check_get,
+        handlers::item_handlers::search_item_get,
+        handlers::item_handlers::get_each_item_get,
+        handlers::item_handlers::update_item_put,
+        handlers::item_handlers::register_item_post,
+        handlers::item_handlers::delete_item_delete,
+        handlers::item_handlers::generate_visible_ids_post,
+        handlers::item_handlers::generate_csv_get,
+        handlers::object_handlers::search_object_get,
+        handlers::object_handlers::get_each_object_get,
+        handlers::object_handlers::get_object_with_tag_get,
+        handlers::object_handlers::register_object_post,
+        handlers::object_handlers::update_object_put,
+        handlers::object_handlers::delete_object_delete,
+    ),
+    components(schemas(
+        handlers::health_check_handler::HelthCheckResponse,
+        server::MeiliSearchItemData,
+        server::ItemData,
+        server::ControlItemData,
+        server::CsvItemData,
+        server::ObjectData,
+        server::MeiliSearchObjectData,
+        server::DeleteItemData,
+        server::RegisterObjectData,
+        server::UpdateObjectData,
+        ::entity::item::Record,
+        ::entity::label::Color,
+        ::entity::label::Model,
+    ))
+)]
+
+struct ApiDoc;

@@ -1,8 +1,5 @@
 use crate::handlers::admin_handlers::regiter_visible_id_post;
-use axum::{
-    routing::{delete, get, post, put},
-    Router,
-};
+use axum::{routing::post, Router};
 
 pub async fn admin_routes() -> Router {
     let item_routes =

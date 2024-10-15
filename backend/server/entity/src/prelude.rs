@@ -3,3 +3,5 @@
 pub use super::item::Entity as Item;
 pub use super::label::Entity as Label;
 pub use super::object::Entity as Object;
+pub use super::object_tag_junction::Entity as ObjectTagJunction;
+pub use super::tag::Entity as Tag;

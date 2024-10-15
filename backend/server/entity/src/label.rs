@@ -2,8 +2,11 @@
 
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema,
+)]
 #[sea_orm(
     rs_type = "String",
     db_type = "String(StringLen::None)",
@@ -21,7 +24,21 @@ pub enum Color {
     Pink,
 }
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
+impl Color {
+    pub const COLOR_PALETTE: [Color; 9] = [
+        Color::Red,
+        Color::Orange,
+        Color::Brown,
+        Color::SkyBlue,
+        Color::Blue,
+        Color::Green,
+        Color::Yellow,
+        Color::Purple,
+        Color::Pink,
+    ];
+}
+
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, ToSchema)]
 #[sea_orm(table_name = "label")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]

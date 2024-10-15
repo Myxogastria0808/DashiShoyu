@@ -1,21 +1,32 @@
 use ::entity::{
     item::{self, Entity as Item, Record},
-    label::{self, Entity as Label},
+    label::{self, Color, Entity as Label},
 };
 use axum::{
-    extract::{Multipart, Path, Query},
+    extract::{Path, Query},
     Extension, Json,
 };
 use chrono::Utc;
+use meilisearch_sdk::client::Client;
 use neo4rs::Graph;
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, LoaderTrait, QueryFilter, Set,
-};
+use rand::{distributions::Alphanumeric, Rng};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use serde_json::json;
 use server::AppError;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use uuid::Uuid;
 
-//search with Meilisearch
+//* search with meilisearch *//
+#[axum::debug_handler]
+#[utoipa::path(
+    get,
+    path = "/api/item/search",
+    params(("keywords", Query, description = "set search word")),
+    responses(
+        (status = 200, description = "OK", body = Vec<MeiliSearchItemData>),
+    ),
+    tag = "Item",
+)]
 pub async fn search_item_get(
     Query(param): Query<HashMap<String, String>>,
     Extension(meilisearch_client): Extension<meilisearch_sdk::client::Client>,
@@ -38,1615 +49,613 @@ pub async fn search_item_get(
     Ok(Json(result))
 }
 
-//get one item
+//移動するんだよ！！！！！
+////////////////////////////////////////////////////////////////////////////////////////
+async fn get_item_data(
+    id: i32,
+    db: DatabaseConnection,
+    graph: Graph,
+) -> Result<Json<server::ItemData>, AppError> {
+    let item_model: item::Model = Item::find_by_id(id)
+        .one(&db)
+        .await?
+        .ok_or(AppError(anyhow::anyhow!("Item was not found.")))?;
+    let label_model: label::Model = Label::find()
+        .filter(label::Column::VisibleId.eq(item_model.visible_id.clone()))
+        .one(&db)
+        .await?
+        .ok_or(AppError(anyhow::anyhow!("Parent label was not found.")))?;
+    let path = server::search_path(&graph, item_model.id.into()).await?;
+    if path.len() != 1 {
+        let parent_item_model: item::Model = Item::find_by_id(path[1] as i32)
+            .one(&db)
+            .await?
+            .ok_or(AppError(anyhow::anyhow!("Parent item was not found.")))?;
+        let mut item_name_path: Vec<String> = Vec::new();
+        let mut visible_id_path: Vec<String> = Vec::new();
+        for id in &path {
+            let item_path_model: item::Model = Item::find_by_id(*id as i32)
+                .one(&db)
+                .await?
+                .ok_or(AppError(anyhow::anyhow!("Parent item was not found.")))?;
+            item_name_path.push(item_path_model.name);
+            visible_id_path.push(item_path_model.visible_id);
+        }
+        let item = server::ItemData {
+            id: item_model.id,
+            visible_id: item_model.visible_id,
+            parent_visible_id: parent_item_model.visible_id,
+            name: item_model.name,
+            product_number: item_model.product_number,
+            photo_url: item_model.photo_url,
+            record: item_model.record,
+            color: label_model.color,
+            description: item_model.description,
+            year_purchased: item_model.year_purchased,
+            connector: serde_json::from_value(item_model.connector.clone())?,
+            created_at: item_model.created_at.to_string(),
+            updated_at: item_model.updated_at.to_string(),
+            path,
+            visible_id_path,
+            item_name_path,
+        };
+        Ok(Json(item))
+    } else {
+        let item = server::ItemData {
+            id: item_model.id,
+            visible_id: item_model.visible_id.clone(),
+            parent_visible_id: item_model.visible_id.clone(),
+            name: item_model.name.clone(),
+            product_number: item_model.product_number,
+            photo_url: item_model.photo_url,
+            record: item_model.record,
+            color: label_model.color,
+            description: item_model.description,
+            year_purchased: item_model.year_purchased,
+            connector: serde_json::from_value(item_model.connector.clone())?,
+            created_at: item_model.created_at.to_string(),
+            updated_at: item_model.updated_at.to_string(),
+            path,
+            visible_id_path: vec![item_model.visible_id],
+            item_name_path: vec![item_model.name],
+        };
+        Ok(Json(item))
+    }
+}
+
+//* get one item *//
+#[axum::debug_handler]
+#[utoipa::path(
+    get,
+    path = "/api/item/get/{id}",
+    params(("id", Path, description = "set get item id")),
+    responses(
+        (status = 200, description = "OK", body = ItemData),
+    ),
+    tag = "Item",
+)]
 pub async fn get_each_item_get(
     Path(id): Path<i32>,
     Extension(db): Extension<DatabaseConnection>,
     Extension(graph): Extension<Graph>,
 ) -> Result<Json<server::ItemData>, AppError> {
-    let item_model = Item::find().filter(item::Column::Id.eq(id)).one(&db).await?.ok_or(AppError(anyhow::anyhow!("Item was not found.")))?;
-    let path = server::search_path(graph, item_model.id.into()).await?;
-    let parent_item_model = Item::find().filter(item::Column::Id.eq(path[1])).one(&db).await?.ok_or(AppError(anyhow::anyhow!("Parent item was not found.")))?;
-    let parent_label_model = Label::find().filter(label::Column::VisibleId.eq(parent_item_model.visible_id.clone())).one(&db).await?.ok_or(AppError(anyhow::anyhow!("Parent label was not found.")))?;
-    let mut item_name_path: Vec<String> = Vec::new();
-    let mut visible_id_path: Vec<String> = Vec::new();
-    for id in &path {
-        let item_path_model = Item::find().filter(item::Column::Id.eq(*id)).one(&db).await?.ok_or(AppError(anyhow::anyhow!("Parent item was not found.")))?;
-        item_name_path.push(item_path_model.name);
-        visible_id_path.push(item_path_model.visible_id);
-    }
-    let item = server::ItemData {
-        id: item_model.id,
-        visible_id: item_model.visible_id,
-        parent_visible_id: parent_item_model.visible_id,
-        name: item_model.name,
-        product_number: item_model.product_number,
-        photo_url: item_model.photo_url,
-        record: item_model.record,
-        color: parent_label_model.color,
-        description: item_model.description,
-        year_purchased: item_model.year_purchased,
-        connector: item_model.connector,
-        created_at: item_model.created_at,
-        updated_at: item_model.updated_at,
-        path,
-        visible_id_path,
-        item_name_path,
-    };
-    Ok(Json(item))
+    let item_data = get_item_data(id, db, graph).await?;
+    Ok(item_data)
 }
 
-// //* update *//
+//* update *//
+#[axum::debug_handler]
+#[utoipa::path(
+    put,
+    path = "/api/item/update/{id}",
+    params(("id", Path, description = "set update item id")),
+    request_body(content = ControlItemData, description = "set update item data"),
+    responses(
+        (status = 200, description = "OK", body = ItemData),
+    ),
+    tag = "Item",
+)]
 pub async fn update_item_put(
     Path(id): Path<i32>,
     Extension(db): Extension<DatabaseConnection>,
-    Extension(meilisearch_client): Extension<meilisearch_sdk::client::Client>,
-    Extension(reqwest_client): Extension<reqwest::Client>,
-    Extension(meilisearch_admin_api_key): Extension<String>,
-    Extension(meilisearch_url): Extension<String>,
-    mut multipart: Multipart,
-) -> Result<Json<server::MeiliSearchItemData>, AppError> {
-    //parent_visible_idに変更があるかを確認するためのflag
-    let mut is_chaged_parennt_visible_id_flag = false;
-    //visible_idが変更されているかどうかの確認するためのflag
-    let mut is_changed_visible_id_flag = false;
-    //存在しないfield_nameがないか確認するためのflag
-    let mut have_invalid_field_name_flag = false;
-    //connectorのvector
-    let mut result_connector_vec: Vec<String> = Vec::new();
-    let mut update_data = server::ControlItemData {
-        visible_id: "".to_string(),
-        parent_visible_id: "".to_string(),
-        name: "".to_string(),
-        product_number: "".to_string(),
-        record: Record::Qr,
-        description: "".to_string(),
-        year_purchased: None,
-        connector: json!(result_connector_vec),
-    };
-    while let Some(field) = multipart.next_field().await? {
-        let field_name = field.name().unwrap().to_string();
-        println!("field name: {}", field_name);
-        //connector
-        if field_name.starts_with("connector") {
-            let connector = field.text().await?;
-            println!("connector: {}", connector);
-            result_connector_vec.push(connector);
-            continue;
+    Extension(graph): Extension<Graph>,
+    Extension(meilisearch_client): Extension<Client>,
+    Json(update_data): Json<server::ControlItemData>,
+) -> Result<Json<server::ItemData>, AppError> {
+    /////////////////////////////////////////////////////////////
+    // //validate_flag
+    // let mut validate_flag = server::ControlItemFieldCountFlags::initialize();
+    // //connectorのvector
+    // let mut result_connector_vec: Vec<String> = Vec::new();
+    // let mut update_data = server::ControlItemData {
+    //     visible_id: "".to_string(),
+    //     parent_visible_id: "".to_string(),
+    //     name: "".to_string(),
+    //     product_number: "".to_string(),
+    //     record: Record::Qr,
+    //     description: "".to_string(),
+    //     year_purchased: None,
+    //     connector: result_connector_vec.clone(),
+    // };
+    // while let Some(field) = multipart.next_field().await? {
+    //     let field_name = field.name().unwrap().to_string();
+    //     println!("field name: {}", field_name);
+    //     //connector
+    //     if field_name.starts_with("connector") {
+    //         let connector = field.text().await?;
+    //         println!("connector: {}", connector);
+    //         result_connector_vec.push(connector);
+    //         continue;
+    //     }
+    //     match field_name.as_str() {
+    //         "visible_id" => {
+    //             let visible_id = field.text().await?;
+    //             println!("visible_id: {}", visible_id);
+    //             validate_flag.increment_visible_id(&visible_id);
+    //             update_data.visible_id = visible_id;
+    //         }
+    //         "parent_visible_id" => {
+    //             let parent_visible_id = field.text().await?;
+    //             println!("parent_visible_id: {}", parent_visible_id);
+    //             validate_flag.increment_parent_visible_id(&parent_visible_id);
+    //             update_data.parent_visible_id = parent_visible_id;
+    //         }
+    //         "name" => {
+    //             let name = field.text().await?;
+    //             println!("name: {}", name);
+    //             validate_flag.increment_name(&name);
+    //             update_data.name = name;
+    //         }
+    //         "product_number" => {
+    //             let product_number = field.text().await?;
+    //             println!("product_number: {}", product_number);
+    //             validate_flag.increment_product_number();
+    //             update_data.product_number = product_number;
+    //         }
+    //         "record" => {
+    //             let record = field.text().await?;
+    //             println!("record: {}", record);
+    //             validate_flag.increment_record(&record);
+    //             update_data.record = match record.as_str() {
+    //                 "Qr" => Record::Qr,
+    //                 "Barcode" => Record::Barcode,
+    //                 "Nothing" => Record::Nothing,
+    //                 _ => panic!("Record type validation was failed"),
+    //             };
+    //         }
+    //         "description" => {
+    //             let description = field.text().await?;
+    //             println!("description: {}", description);
+    //             validate_flag.increment_description();
+    //             update_data.description = description;
+    //         }
+    //         "year_purchased" => {
+    //             let year_purchased = field.text().await?;
+    //             println!("year_purchased: {}", year_purchased);
+    //             validate_flag.increment_year_purchased();
+    //             if year_purchased.is_empty() {
+    //                 update_data.year_purchased = None;
+    //             } else {
+    //                 update_data.year_purchased = Some(year_purchased.parse::<i32>()?);
+    //             }
+    //         }
+    //         _ => {
+    //             println!("other");
+    //             validate_flag.increment_invalid_field_name();
+    //         }
+    //     }
+    // }
+    // //validate_check
+    // validate_flag.check_is_ok()?;
+    // //update connector
+    // update_data.connector = result_connector_vec;
+    /////////////////////////////////////////////////////////////
+
+    //update neo4j
+    'neo4j_break: {
+        let parent_id_struct = server::search_parent_id(&db, &graph, id.into()).await?;
+        let old_parent_id = parent_id_struct.actual_parent_id;
+        let is_actual_root = parent_id_struct.is_actual_root;
+        //rootの早期
+        if is_actual_root {
+            break 'neo4j_break;
         }
-        match field_name.as_str() {
-            "visible_id" => {
-                let visible_id = field.text().await?;
-                println!("visible_id: {}", visible_id);
-                //とりあえず格納する
-                update_data.visible_id = visible_id;
-            }
-            "parent_visible_id" => {
-                let parent_id = field.text().await?;
-                println!("parent_visible_id: {}", parent_id);
-                //とりあえず格納する
-                update_data.parent_visible_id = parent_id;
-            }
-            "name" => {
-                let name = field.text().await?;
-                println!("name: {}", name);
-                update_data.name = name;
-            }
-            "product_number" => {
-                let product_number = field.text().await?;
-                println!("product_number: {}", product_number);
-                update_data.product_number = product_number;
-            }
-            "record" => {
-                let record = field.text().await?;
-                println!("record: {}", record);
-                //Recordに不正な値が入っている場合の早期リターン
-                if record != "Qr" && record != "Barcode" && record != "Nothing" {
-                    return Err(AppError(anyhow::anyhow!(
-                        "Record type '{}' is invalid",
-                        record
-                    )));
-                }
-                update_data.record = match record.as_str() {
-                    "Qr" => Record::Qr,
-                    "Barcode" => Record::Barcode,
-                    "Nothing" => Record::Nothing,
-                    _ => panic!("Record type validation was failed"),
-                };
-            }
-            "description" => {
-                let description = field.text().await?;
-                println!("description: {}", description);
-                update_data.description = description;
-            }
-            "year_purchased" => {
-                let year_purchased = field.text().await?;
-                println!("year_purchased: {}", year_purchased);
-                if year_purchased.is_empty() {
-                    update_data.year_purchased = None;
-                } else {
-                    update_data.year_purchased = Some(year_purchased.parse::<i32>()?);
-                }
-            }
-            _ => {
-                println!("other");
-                have_invalid_field_name_flag = true;
-            }
-        }
-    }
-    //存在しないfieldを取得した場合の早期リターン
-    if have_invalid_field_name_flag {
-        return Err(AppError(anyhow::anyhow!("Invalid field name")));
-    }
-    //更新対象の物品のデータ取得
-    let update_item_model: item::Model = Item::find_by_id(id)
-        .one(&db)
-        .await?
-        .ok_or(AppError(anyhow::anyhow!("Item not found")))?;
-    //FormDataのvisible_idからLabel Tableのidを取得
-    //※更新するvisible_idが存在するかどうかの確認
-    let new_label_model: label::Model = Label::find()
-        .filter(label::Column::VisibleId.eq(&update_data.visible_id))
-        .one(&db)
-        .await?
-        .ok_or(AppError(anyhow::anyhow!("Invaild visible_id")))?;
-    //visible_idが変化しているかどうかをチェック
-    let old_label_model: label::Model = vec![update_item_model.clone()]
-        .load_one(Label, &db)
-        .await?
-        .first()
-        .cloned()
-        .ok_or(AppError(anyhow::anyhow!("Visible Id was not found")))?
-        .ok_or(AppError(anyhow::anyhow!("Visible Id was not found")))?;
-    if old_label_model.visible_id != new_label_model.visible_id {
-        //visible_idが存在するかどうかの確認
-        Label::find()
-            .filter(label::Column::VisibleId.eq(&update_data.visible_id))
+        //親物品が変わっているかどうかの確認
+        let new_parent_id: i64 = Item::find()
+            .filter(item::Column::VisibleId.eq(update_data.parent_visible_id))
             .one(&db)
             .await?
-            .ok_or(AppError(anyhow::anyhow!("Invaild visible_id")))?;
-        is_changed_visible_id_flag = true;
-    }
-    //parent_visible_idが変化しているかどうかをチェック
-    let new_parent_label_model: label::Model = Label::find()
-        .filter(label::Column::VisibleId.eq(&update_data.parent_visible_id))
-        .one(&db)
-        .await?
-        .ok_or(AppError(anyhow::anyhow!("Invaild parent_visible_id")))?;
-    let old_parent_label_junction_model: parent_label_junction::Model =
-        vec![update_item_model.clone()]
-            .load_one(ParentLabelJunction, &db)
-            .await?
-            .first()
-            .cloned()
-            .ok_or(AppError(anyhow::anyhow!("Parent Visible Id was not found")))?
-            .ok_or(AppError(anyhow::anyhow!("Parent Visible Id was not found")))?;
-    let old_parent_label_model: label::Model = vec![old_parent_label_junction_model.clone()]
-        .load_one(Label, &db)
-        .await?
-        .first()
-        .cloned()
-        .ok_or(AppError(anyhow::anyhow!("Parent Visible Id was not found")))?
-        .ok_or(AppError(anyhow::anyhow!("Parent Visible Id was not found")))?;
-    if new_parent_label_model.visible_id != old_parent_label_model.visible_id {
-        is_chaged_parennt_visible_id_flag = true;
-    }
-    //* validation */
-    //parent_visible_idがその物品の子孫の子になっていないかのチェック
-    let mut descendant_item_labels_vec: Vec<i32> = Vec::new();
-    let mut children_item_labels_vec: Vec<i32> = Vec::new();
-    let mut grandchild_item_labels_vec: Vec<i32> = Vec::new();
-    let mut parent_label_junction_ids_vec = ParentLabelJunction::find()
-        .filter(parent_label_junction::Column::LabelId.eq(update_item_model.label_id))
-        .all(&db)
-        .await?
-        .iter()
-        .map(|parent_label_junction| parent_label_junction.id)
-        .collect::<Vec<i32>>();
-    let mut grand_parent_label_junction_ids_vec = GrandParentLabelJunction::find()
-        .filter(grand_parent_label_junction::Column::LabelId.eq(update_item_model.label_id))
-        .all(&db)
-        .await?
-        .iter()
-        .map(|grand_parent_label_junction| grand_parent_label_junction.id)
-        .collect::<Vec<i32>>();
-    for parent_label_id in parent_label_junction_ids_vec.clone() {
-        let label_id = Item::find()
-            .filter(item::Column::ParentLabelId.eq(parent_label_id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!("Item not found")))?
-            .label_id;
-        children_item_labels_vec.push(label_id);
-        descendant_item_labels_vec.push(label_id);
-    }
-    for grand_parent_label_id in grand_parent_label_junction_ids_vec.clone() {
-        let label_id = Item::find()
-            .filter(item::Column::GrandParentLabelId.eq(grand_parent_label_id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!("Item not found")))?
-            .label_id;
-        grandchild_item_labels_vec.push(label_id);
-        descendant_item_labels_vec.push(label_id);
-    }
-    //visible_id・parent_visible_idの変更がある場合に利用するvector
-    let update_children_item_labels_vec = children_item_labels_vec.clone();
-    let update_grandchild_item_labels_vec = grandchild_item_labels_vec.clone();
-    ///////////////////////////////////////////////////////////////////////
-    println!(
-        "parent_label_junction_ids_vec: {:?}",
-        parent_label_junction_ids_vec
-    );
-    println!(
-        "grand_parent_label_junction_ids_vec: {:?}",
-        grand_parent_label_junction_ids_vec
-    );
-    println!("children_item_labels_vec: {:?}", children_item_labels_vec);
-    println!(
-        "grandchild_item_labels_vec: {:?}",
-        grandchild_item_labels_vec
-    );
-    ///////////////////////////////////////////////////////////////////////
-    //更新対象の物品の全子孫のlabel_idを取得
-    //descendant_item_labels_vecに全子孫のlabel_idを格納
-    loop {
-        if children_item_labels_vec.is_empty() || grandchild_item_labels_vec.is_empty() {
-            descendant_item_labels_vec.append(&mut grandchild_item_labels_vec.clone());
-            break;
+            .ok_or(AppError(anyhow::anyhow!("Parent item was not found.")))?
+            .id
+            .into();
+        if old_parent_id == new_parent_id {
+            break 'neo4j_break;
         }
-        //子孫の処理
-        for descendant_item_label_id in descendant_item_labels_vec.clone() {
-            parent_label_junction_ids_vec.append(
-                &mut ParentLabelJunction::find()
-                    .filter(parent_label_junction::Column::LabelId.eq(descendant_item_label_id))
-                    .all(&db)
-                    .await?
-                    .iter()
-                    .map(|parent_label_junction| parent_label_junction.id)
-                    .collect::<Vec<i32>>(),
-            );
-            grand_parent_label_junction_ids_vec.append(
-                &mut GrandParentLabelJunction::find()
-                    .filter(
-                        grand_parent_label_junction::Column::LabelId.eq(descendant_item_label_id),
-                    )
-                    .all(&db)
-                    .await?
-                    .iter()
-                    .map(|grand_parent_label_junction| grand_parent_label_junction.id)
-                    .collect::<Vec<i32>>(),
-            );
-            for parent_label_id in parent_label_junction_ids_vec.clone() {
-                let label_id = Item::find()
-                    .filter(item::Column::ParentLabelId.eq(parent_label_id))
-                    .one(&db)
-                    .await?
-                    .ok_or(AppError(anyhow::anyhow!("Item not found")))?
-                    .label_id;
-                children_item_labels_vec.push(label_id);
-                descendant_item_labels_vec.push(label_id);
-                //meilisearchの更新 (parent_visible_idを更新)
-            }
-            for grand_parent_label_id in grand_parent_label_junction_ids_vec.clone() {
-                let label_id = Item::find()
-                    .filter(item::Column::GrandParentLabelId.eq(grand_parent_label_id))
-                    .one(&db)
-                    .await?
-                    .ok_or(AppError(anyhow::anyhow!("Item not found")))?
-                    .label_id;
-                grandchild_item_labels_vec.push(label_id);
-                descendant_item_labels_vec.push(label_id);
-                //meilisearchの更新 (visible_idを更新)
-            }
-        }
-        parent_label_junction_ids_vec = vec![];
-        grand_parent_label_junction_ids_vec = vec![];
-        children_item_labels_vec = vec![];
-        grandchild_item_labels_vec = vec![];
-    }
-    //更新する物品IDの親物品が子孫の子になっていないかのチェック
-    for label_id in descendant_item_labels_vec.clone() {
-        let parent_label_id = Label::find()
-            .filter(label::Column::VisibleId.eq(&update_data.parent_visible_id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!("Item not found")))?
-            .id;
-        if label_id == parent_label_id {
+        //リレーションを張り替える処理
+        let mut descendants = server::search_descendants_ids_hashset(&graph, id.into()).await?;
+        //子孫のノードが親のノードになっていないかの確認
+        let is_not_duplication = descendants.insert(new_parent_id);
+        if !is_not_duplication {
             return Err(AppError(anyhow::anyhow!(
-                "The visible id ({}) is a descendant of the one of the descendant visible id ({})",
-                &update_data.visible_id,
-                Label::find()
-                    .filter(label::Column::Id.eq(label_id))
-                    .one(&db)
-                    .await?
-                    .ok_or(AppError(anyhow::anyhow!("Item not found")))?
-                    .visible_id,
+                "Cannot change relation to descendants"
             )));
         }
+        //リレーションの張り替え
+        server::reconnect_new_parent_item(&graph, old_parent_id, new_parent_id, id.into()).await?;
     }
-    //parent_visible_idが変更されている場合の処理
-    if is_chaged_parennt_visible_id_flag {
-        //子物品・孫物品の更新
-        for label_id in update_children_item_labels_vec.clone() {
-            //parent_visible_idが変更されている場合の処理 (parent_visible_idとvisibleid、またはparent_visible_idのみが変更されている場合の処理)
-            let item_model: item::Model = Item::find()
-                .filter(item::Column::LabelId.eq(label_id))
-                .one(&db)
-                .await?
-                .ok_or(AppError(anyhow::anyhow!("Item not found")))?;
-            let grand_parent_label_junction_model = vec![item_model.clone()]
-                .load_one(GrandParentLabelJunction, &db)
-                .await?
-                .first()
-                .cloned()
-                .ok_or(AppError(anyhow::anyhow!(
-                    "Grand parent label junction model was not found"
-                )))?
-                .ok_or(AppError(anyhow::anyhow!(
-                    "Grand parent label junction model was not found"
-                )))?;
-            let mut grand_parent_label_junction_model: grand_parent_label_junction::ActiveModel =
-                grand_parent_label_junction_model.into();
-            grand_parent_label_junction_model.label_id = Set(new_parent_label_model.id);
-            grand_parent_label_junction_model.update(&db).await?;
-            //meilisearchの更新
-            let url = format!("{}/indexes/item/documents/{}", meilisearch_url, id);
-            let mut meilisearch_item_data = reqwest_client
-                .get(&url)
-                .bearer_auth(&meilisearch_admin_api_key)
-                .send()
-                .await?
-                .json::<server::MeiliSearchItemData>()
-                .await?;
-            meilisearch_item_data.grand_parent_visible_id =
-                new_parent_label_model.visible_id.clone();
-            let item_meilisearch = meilisearch_client
-                .index("item")
-                .add_documents(&vec![meilisearch_item_data], Some("id"))
-                .await
-                .unwrap();
-            println!(
-                "[INFO]: update MeiliSearch data of a child item ({}) result:  {:#?}",
-                new_label_model.visible_id.clone(),
-                item_meilisearch
-            );
-        }
-        let parent_label_model = Label::find()
-            .filter(label::Column::VisibleId.eq(&update_data.parent_visible_id))
+    //update Item table
+    {
+        let item_model: item::Model = Item::find_by_id(id)
             .one(&db)
             .await?
-            .ok_or(AppError(anyhow::anyhow!(
-                "Parent Label model was not found"
-            )))?;
-        //parent_label_idの取得
-        let parent_label_id = parent_label_model.id;
-        let parent_item_model = Item::find()
-            .filter(item::Column::LabelId.eq(parent_label_id))
+            .ok_or(AppError(anyhow::anyhow!("Item was not found.")))?;
+        let mut item_active_model: item::ActiveModel = item_model.into();
+        item_active_model.visible_id = Set(update_data.visible_id);
+        item_active_model.name = Set(update_data.name);
+        item_active_model.product_number = Set(update_data.product_number);
+        item_active_model.record = Set(update_data.record);
+        item_active_model.description = Set(update_data.description);
+        item_active_model.year_purchased = Set(update_data.year_purchased);
+        item_active_model.connector = Set(json!(update_data.connector));
+        item_active_model.updated_at = Set(Utc::now().naive_local());
+        item_active_model.update(&db).await?;
+    }
+    //update meilisearch
+    {
+        //更新後のitem_model
+        let item_model = Item::find_by_id(id)
             .one(&db)
             .await?
-            .ok_or(AppError(anyhow::anyhow!("Parent Item model was not found")))?;
-        //parent_idの取得
-        let parent_id = parent_item_model.id;
-        //grand_parent_label_idの取得
-        let grand_parent_label_id = Label::find()
-            .filter(label::Column::Id.eq(parent_item_model.parent_label_id))
+            .ok_or(AppError(anyhow::anyhow!("Item was not found.")))?;
+        //更新後のitem_modelに対するlabel_model
+        let label_model = Label::find()
+            .filter(label::Column::VisibleId.eq(item_model.visible_id.clone()))
             .one(&db)
             .await?
-            .ok_or(AppError(anyhow::anyhow!(
-                "Grand parent label id was not found"
-            )))?
-            .id;
-        //grand_parent_idの取得
-        let grand_parent_id = Item::find()
-            .filter(item::Column::LabelId.eq(grand_parent_label_id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!(
-                "Grand parent item model was not found"
-            )))?
-            .id;
-        //visible_idが変更されている場合の処理 (parent_visible_idとvisibleidが変更されている場合の処理)
-        if is_changed_visible_id_flag {
-            //子物品・孫物品の更新
-            for label_id in update_children_item_labels_vec.clone() {
-                let item_model: item::Model = Item::find()
-                    .filter(item::Column::LabelId.eq(label_id))
-                    .one(&db)
-                    .await?
-                    .ok_or(AppError(anyhow::anyhow!("Item not found")))?;
-                let parent_label_junction_model = vec![item_model.clone()]
-                    .load_one(ParentLabelJunction, &db)
-                    .await?
-                    .first()
-                    .cloned()
-                    .ok_or(AppError(anyhow::anyhow!(
-                        "Parent label junction model was not found"
-                    )))?
-                    .ok_or(AppError(anyhow::anyhow!(
-                        "Parent label junction model was not found"
-                    )))?;
-                let mut parent_label_junction_model: parent_label_junction::ActiveModel =
-                    parent_label_junction_model.into();
-                parent_label_junction_model.label_id = Set(new_label_model.id);
-                parent_label_junction_model.update(&db).await?;
-                //meilisearchの更新
-                let url = format!("{}/indexes/item/documents/{}", meilisearch_url, id);
-                let mut meilisearch_item_data = reqwest_client
-                    .get(&url)
-                    .bearer_auth(&meilisearch_admin_api_key)
-                    .send()
-                    .await?
-                    .json::<server::MeiliSearchItemData>()
-                    .await?;
-                meilisearch_item_data.parent_visible_id = new_parent_label_model.visible_id.clone();
-                let item_meilisearch = meilisearch_client
-                    .index("item")
-                    .add_documents(&vec![meilisearch_item_data], Some("id"))
-                    .await
-                    .unwrap();
-                println!(
-                    "[INFO]: update MeiliSearch data of a child item ({}) result:  {:#?}",
-                    new_label_model.visible_id.clone(),
-                    item_meilisearch
-                );
-            }
-            for label_id in update_grandchild_item_labels_vec.clone() {
-                let item_model: item::Model = Item::find()
-                    .filter(item::Column::LabelId.eq(label_id))
-                    .one(&db)
-                    .await?
-                    .ok_or(AppError(anyhow::anyhow!("Item not found")))?;
-                let grand_parent_label_junction_model = vec![item_model.clone()]
-                    .load_one(GrandParentLabelJunction, &db)
-                    .await?
-                    .first()
-                    .cloned()
-                    .ok_or(AppError(anyhow::anyhow!(
-                        "Grand parent label junction model was not found"
-                    )))?
-                    .ok_or(AppError(anyhow::anyhow!(
-                        "Grand parent label junction model was not found"
-                    )))?;
-                let mut grand_parent_label_junction_model: grand_parent_label_junction::ActiveModel =
-                    grand_parent_label_junction_model.into();
-                grand_parent_label_junction_model.label_id = Set(new_label_model.id);
-                grand_parent_label_junction_model.update(&db).await?;
-                //meilisearchの更新
-                let url = format!("{}/indexes/item/documents/{}", meilisearch_url, id);
-                let mut meilisearch_item_data = reqwest_client
-                    .get(&url)
-                    .bearer_auth(&meilisearch_admin_api_key)
-                    .send()
-                    .await?
-                    .json::<server::MeiliSearchItemData>()
-                    .await?;
-                meilisearch_item_data.grand_parent_visible_id =
-                    new_parent_label_model.visible_id.clone();
-                let item_meilisearch = meilisearch_client
-                    .index("item")
-                    .add_documents(&vec![meilisearch_item_data], Some("id"))
-                    .await
-                    .unwrap();
-                println!(
-                    "[INFO]: update MeiliSearch data of a child item ({}) result:  {:#?}",
-                    new_label_model.visible_id.clone(),
-                    item_meilisearch
-                );
-            }
-            //update処理
-            let mut update_item_model: item::ActiveModel = Item::find()
-                .filter(item::Column::Id.eq(id))
-                .one(&db)
-                .await?
-                .ok_or(AppError(anyhow::anyhow!("Item not found")))?
-                .into();
-            update_item_model.label_id = Set(new_label_model.id);
-            update_item_model.parent_id = Set(parent_id);
-            update_item_model.parent_label_id = Set(parent_label_id);
-            update_item_model.grand_parent_id = Set(grand_parent_id);
-            update_item_model.grand_parent_label_id = Set(grand_parent_label_id);
-            update_item_model.name = Set(update_data.name);
-            update_item_model.product_number = Set(update_data.product_number);
-            update_item_model.record = Set(update_data.record);
-            update_item_model.description = Set(update_data.description);
-            update_item_model.year_purchased = Set(update_data.year_purchased);
-            update_item_model.connector = Set(update_data.connector);
-            update_item_model.updated_at = Set(Utc::now().naive_utc());
-            update_item_model.update(&db).await?;
-            //update meilisearch data
-            let update_item_model = Item::find()
-                .filter(item::Column::Id.eq(id))
-                .one(&db)
-                .await?
-                .ok_or(AppError(anyhow::anyhow!("Item not found")))?;
-            let update_label_model = Label::find()
-                .filter(label::Column::Id.eq(update_item_model.label_id))
-                .one(&db)
-                .await?
-                .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
-            let update_parent_label_model = Label::find()
-                .filter(label::Column::Id.eq(update_item_model.parent_label_id))
-                .one(&db)
-                .await?
-                .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
-            let update_grand_parent_label_model = Label::find()
-                .filter(label::Column::Id.eq(update_item_model.grand_parent_label_id))
-                .one(&db)
-                .await?
-                .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
-            let meilisearch_update_item: server::MeiliSearchItemData =
-                server::MeiliSearchItemData {
-                    id,
-                    visible_id: update_label_model.visible_id,
-                    parent_visible_id: update_parent_label_model.visible_id,
-                    grand_parent_visible_id: update_grand_parent_label_model.visible_id,
-                    name: update_item_model.name,
-                    product_number: update_item_model.product_number,
-                    photo_url: update_item_model.photo_url,
-                    record: update_item_model.record,
-                    color: update_label_model.color,
-                    description: update_item_model.description,
-                    year_purchased: update_item_model.year_purchased,
-                    connector: update_item_model.connector,
-                    created_at: update_item_model.created_at,
-                    updated_at: update_item_model.updated_at,
-                };
-            let item_meilisearch = meilisearch_client
-                .index("item")
-                .add_documents(&vec![meilisearch_update_item.clone()], Some("id"))
-                .await
-                .unwrap();
-            println!("[INFO]: MeiliSearch Result {:#?}", item_meilisearch);
-            //return
-            return Ok(Json(meilisearch_update_item));
-        }
-        //parent_visible_idが変更されている場合の処理 (parent_visible_idのみが変更されている場合の処理)
-        //update処理
-        let mut update_item_model: item::ActiveModel = Item::find()
-            .filter(item::Column::Id.eq(id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!("Item not found")))?
-            .into();
-        update_item_model.parent_id = Set(parent_id);
-        update_item_model.parent_label_id = Set(parent_label_id);
-        update_item_model.grand_parent_id = Set(grand_parent_id);
-        update_item_model.grand_parent_label_id = Set(grand_parent_label_id);
-        update_item_model.name = Set(update_data.name);
-        update_item_model.product_number = Set(update_data.product_number);
-        update_item_model.record = Set(update_data.record);
-        update_item_model.description = Set(update_data.description);
-        update_item_model.year_purchased = Set(update_data.year_purchased);
-        update_item_model.connector = Set(update_data.connector);
-        update_item_model.updated_at = Set(Utc::now().naive_utc());
-        update_item_model.update(&db).await?;
-        //update meilisearch data
-        let update_item_model = Item::find()
-            .filter(item::Column::Id.eq(id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!("Item not found")))?;
-        let update_label_model = Label::find()
-            .filter(label::Column::Id.eq(update_item_model.label_id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
-        let update_parent_label_model = Label::find()
-            .filter(label::Column::Id.eq(update_item_model.parent_label_id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
-        let update_grand_parent_label_model = Label::find()
-            .filter(label::Column::Id.eq(update_item_model.grand_parent_label_id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
-        let meilisearch_update_item: server::MeiliSearchItemData = server::MeiliSearchItemData {
+            .ok_or(AppError(anyhow::anyhow!("Label was not found.")))?;
+        let meilisearch_data = server::MeiliSearchItemData {
             id,
-            visible_id: update_label_model.visible_id,
-            parent_visible_id: update_parent_label_model.visible_id,
-            grand_parent_visible_id: update_grand_parent_label_model.visible_id,
-            name: update_item_model.name,
-            product_number: update_item_model.product_number,
-            photo_url: update_item_model.photo_url,
-            record: update_item_model.record,
-            color: update_label_model.color,
-            description: update_item_model.description,
-            year_purchased: update_item_model.year_purchased,
-            connector: update_item_model.connector,
-            created_at: update_item_model.created_at,
-            updated_at: update_item_model.updated_at,
+            visible_id: item_model.visible_id,
+            name: item_model.name,
+            product_number: item_model.product_number,
+            photo_url: item_model.photo_url,
+            record: item_model.record,
+            color: label_model.color,
+            description: item_model.description,
+            year_purchased: item_model.year_purchased,
+            connector: serde_json::from_value(item_model.connector.clone())?,
+            created_at: item_model.created_at.to_string(),
+            updated_at: item_model.updated_at.to_string(),
         };
-        let item_meilisearch = meilisearch_client
+        meilisearch_client
             .index("item")
-            .add_documents(&vec![meilisearch_update_item.clone()], Some("id"))
-            .await
-            .unwrap();
-        println!("[INFO]: MeiliSearch Result {:#?}", item_meilisearch);
-        //return
-        return Ok(Json(meilisearch_update_item));
+            .add_documents(&[meilisearch_data], Some("id"))
+            .await?;
     }
-    //visible_idが変更されている場合の処理 (visible_idのみが変更されている場合の処理)
-    if is_changed_visible_id_flag {
-        //子物品・孫物品の更新
-        for label_id in update_children_item_labels_vec.clone() {
-            let item_model: item::Model = Item::find()
-                .filter(item::Column::LabelId.eq(label_id))
-                .one(&db)
-                .await?
-                .ok_or(AppError(anyhow::anyhow!("Item not found")))?;
-            let parent_label_junction_model = vec![item_model.clone()]
-                .load_one(ParentLabelJunction, &db)
-                .await?
-                .first()
-                .cloned()
-                .ok_or(AppError(anyhow::anyhow!(
-                    "Grand parent label junction model was not found"
-                )))?
-                .ok_or(AppError(anyhow::anyhow!(
-                    "Grand parent label junction model was not found"
-                )))?;
-            let mut parent_label_junction_model: parent_label_junction::ActiveModel =
-                parent_label_junction_model.into();
-            parent_label_junction_model.label_id = Set(new_label_model.id);
-            parent_label_junction_model.update(&db).await?;
-            //meilisearchの更新
-            let url = format!("{}/indexes/item/documents/{}", meilisearch_url, id);
-            let mut meilisearch_item_data = reqwest_client
-                .get(&url)
-                .bearer_auth(&meilisearch_admin_api_key)
-                .send()
-                .await?
-                .json::<server::MeiliSearchItemData>()
-                .await?;
-            meilisearch_item_data.parent_visible_id = new_parent_label_model.visible_id.clone();
-            let item_meilisearch = meilisearch_client
-                .index("item")
-                .add_documents(&vec![meilisearch_item_data], Some("id"))
-                .await
-                .unwrap();
-            println!(
-                "[INFO]: update MeiliSearch data of a child item ({}) result:  {:#?}",
-                new_label_model.visible_id.clone(),
-                item_meilisearch
-            );
-        }
-        for label_id in update_grandchild_item_labels_vec.clone() {
-            let item_model: item::Model = Item::find()
-                .filter(item::Column::LabelId.eq(label_id))
-                .one(&db)
-                .await?
-                .ok_or(AppError(anyhow::anyhow!("Item not found")))?;
-            let grand_parent_label_junction_model = vec![item_model.clone()]
-                .load_one(GrandParentLabelJunction, &db)
-                .await?
-                .first()
-                .cloned()
-                .ok_or(AppError(anyhow::anyhow!(
-                    "Grand parent label junction model was not found"
-                )))?
-                .ok_or(AppError(anyhow::anyhow!(
-                    "Grand parent label junction model was not found"
-                )))?;
-            let mut grand_parent_label_junction_model: grand_parent_label_junction::ActiveModel =
-                grand_parent_label_junction_model.into();
-            grand_parent_label_junction_model.label_id = Set(new_label_model.id);
-            grand_parent_label_junction_model.update(&db).await?;
-            //meilisearchの更新
-            let url = format!("{}/indexes/item/documents/{}", meilisearch_url, id);
-            let mut meilisearch_item_data = reqwest_client
-                .get(&url)
-                .bearer_auth(&meilisearch_admin_api_key)
-                .send()
-                .await?
-                .json::<server::MeiliSearchItemData>()
-                .await?;
-            meilisearch_item_data.grand_parent_visible_id =
-                new_parent_label_model.visible_id.clone();
-            let item_meilisearch = meilisearch_client
-                .index("item")
-                .add_documents(&vec![meilisearch_item_data], Some("id"))
-                .await
-                .unwrap();
-            println!(
-                "[INFO]: update MeiliSearch data of a child item ({}) result:  {:#?}",
-                new_label_model.visible_id.clone(),
-                item_meilisearch
-            );
-        }
-        //update処理
-        let mut update_item_model: item::ActiveModel = Item::find()
-            .filter(item::Column::Id.eq(id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!("Item not found")))?
-            .into();
-        update_item_model.label_id = Set(new_label_model.id);
-        update_item_model.name = Set(update_data.name);
-        update_item_model.product_number = Set(update_data.product_number);
-        update_item_model.record = Set(update_data.record);
-        update_item_model.description = Set(update_data.description);
-        update_item_model.year_purchased = Set(update_data.year_purchased);
-        update_item_model.connector = Set(update_data.connector);
-        update_item_model.updated_at = Set(Utc::now().naive_utc());
-        update_item_model.update(&db).await?;
-        //update meilisearch data
-        let update_item_model = Item::find()
-            .filter(item::Column::Id.eq(id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!("Item not found")))?;
-        let update_label_model = Label::find()
-            .filter(label::Column::Id.eq(update_item_model.label_id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
-        let update_parent_label_model = Label::find()
-            .filter(label::Column::Id.eq(update_item_model.parent_label_id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
-        let update_grand_parent_label_model = Label::find()
-            .filter(label::Column::Id.eq(update_item_model.grand_parent_label_id))
-            .one(&db)
-            .await?
-            .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
-        let meilisearch_update_item: server::MeiliSearchItemData = server::MeiliSearchItemData {
-            id,
-            visible_id: update_label_model.visible_id,
-            parent_visible_id: update_parent_label_model.visible_id,
-            grand_parent_visible_id: update_grand_parent_label_model.visible_id,
-            name: update_item_model.name,
-            product_number: update_item_model.product_number,
-            photo_url: update_item_model.photo_url,
-            record: update_item_model.record,
-            color: update_label_model.color,
-            description: update_item_model.description,
-            year_purchased: update_item_model.year_purchased,
-            connector: update_item_model.connector,
-            created_at: update_item_model.created_at,
-            updated_at: update_item_model.updated_at,
-        };
-        let item_meilisearch = meilisearch_client
-            .index("item")
-            .add_documents(&vec![meilisearch_update_item.clone()], Some("id"))
-            .await
-            .unwrap();
-        println!("[INFO]: MeiliSearch Result {:#?}", item_meilisearch);
-        //return
-        return Ok(Json(meilisearch_update_item));
-    }
-    //visible_id・parent_visible_idが変更されていない場合の処理
-    //update処理
-    let mut update_item_model: item::ActiveModel = Item::find()
-        .filter(item::Column::Id.eq(id))
-        .one(&db)
-        .await?
-        .ok_or(AppError(anyhow::anyhow!("Item not found")))?
-        .into();
-    update_item_model.name = Set(update_data.name);
-    update_item_model.product_number = Set(update_data.product_number);
-    update_item_model.record = Set(update_data.record);
-    update_item_model.description = Set(update_data.description);
-    update_item_model.year_purchased = Set(update_data.year_purchased);
-    update_item_model.connector = Set(update_data.connector);
-    update_item_model.updated_at = Set(Utc::now().naive_utc());
-
-    update_item_model.update(&db).await?;
-    //update meilisearch data
-    let update_item_model = Item::find()
-        .filter(item::Column::Id.eq(id))
-        .one(&db)
-        .await?
-        .ok_or(AppError(anyhow::anyhow!("Item not found")))?;
-    let update_label_model = Label::find()
-        .filter(label::Column::Id.eq(update_item_model.label_id))
-        .one(&db)
-        .await?
-        .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
-    let update_parent_label_model = Label::find()
-        .filter(label::Column::Id.eq(update_item_model.parent_label_id))
-        .one(&db)
-        .await?
-        .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
-    let update_grand_parent_label_model = Label::find()
-        .filter(label::Column::Id.eq(update_item_model.grand_parent_label_id))
-        .one(&db)
-        .await?
-        .ok_or(AppError(anyhow::anyhow!("Label not found")))?;
-    let meilisearch_update_item: server::MeiliSearchItemData = server::MeiliSearchItemData {
-        id,
-        visible_id: update_label_model.visible_id,
-        parent_visible_id: update_parent_label_model.visible_id,
-        grand_parent_visible_id: update_grand_parent_label_model.visible_id,
-        name: update_item_model.name,
-        product_number: update_item_model.product_number,
-        photo_url: update_item_model.photo_url,
-        record: update_item_model.record,
-        color: update_label_model.color,
-        description: update_item_model.description,
-        year_purchased: update_item_model.year_purchased,
-        connector: update_item_model.connector,
-        created_at: update_item_model.created_at,
-        updated_at: update_item_model.updated_at,
-    };
-    let item_meilisearch = meilisearch_client
-        .index("item")
-        .add_documents(&vec![meilisearch_update_item.clone()], Some("id"))
-        .await
-        .unwrap();
-    println!("[INFO]: MeiliSearch Result {:#?}", item_meilisearch);
-    //return
-    Ok(Json(meilisearch_update_item))
+    //更新後のitem_modelを返す
+    let item_data = get_item_data(id, db, graph).await?;
+    Ok(item_data)
 }
-// pub async fn update_item_put(
-//     Path(id): Path<i32>,
-//     Extension(db): Extension<DatabaseConnection>,
-//     mut multipart: Multipart,
-// ) -> Result<Json<server::MeiliSearchItemData>, AppError> {
-//     //parent_visible_idに変更があるかを確認するためのflag
-//     let mut is_chaged_parennt_visible_id_flag = false;
-//     //visible_idが変更されているかどうかの確認するためのflag
-//     let mut is_changed_visible_id_flag = false;
-//     //存在しないfield_nameがないか確認するためのflag
-//     let mut have_invalid_field_name_flag = false;
-//     //connectorのvector
-//     let mut result_connector_vec: Vec<String> = Vec::new();
-//     //DBに突っ込むデータ
-//     let mut update_data = server::ControlItemData {
-//         visible_id: "".to_string(),
-//         parent_id: 0,
-//         parent_visible_id: "".to_string(),
-//         grand_parent_id: 0,
-//         grand_parent_visible_id: "".to_string(),
-//         name: "".to_string(),
-//         product_number: "".to_string(),
-//         record: Record::Qr,
-//         color: Color::Red,
-//         description: "".to_string(),
-//         year_purchased: None,
-//         connector: json!(result_connector_vec),
-//     };
-//     while let Some(field) = multipart.next_field().await? {
-//         let field_name = field.name().unwrap().to_string();
-//         println!("field name: {}", field_name);
-//         //connector
-//         if field_name.starts_with("connector") {
-//             let connector = field.text().await?;
-//             println!("connector: {}", connector);
-//             result_connector_vec.push(connector);
-//             continue;
-//         }
-//         match field_name.as_str() {
-//             "visible_id" => {
-//                 let visible_id = field.text().await?;
-//                 println!("visible_id: {}", visible_id);
-//                 //とりあえず格納する
-//                 update_data.visible_id = visible_id;
-//             }
-//             "parent_visible_id" => {
-//                 let parent_id = field.text().await?;
-//                 println!("parent_visible_id: {}", parent_id);
-//                 //とりあえず格納する
-//                 update_data.parent_visible_id = parent_id;
-//             }
-//             "name" => {
-//                 let name = field.text().await?;
-//                 println!("name: {}", name);
-//                 update_data.name = name;
-//             }
-//             "product_number" => {
-//                 let product_number = field.text().await?;
-//                 println!("product_number: {}", product_number);
-//                 update_data.product_number = product_number;
-//             }
-//             "record" => {
-//                 let record = field.text().await?;
-//                 println!("record: {}", record);
-//                 //Recordに不正な値が入っている場合の早期リターン
-//                 if record != "Qr" && record != "Barcode" && record != "Nothing" {
-//                     return Err(AppError(anyhow::anyhow!(
-//                         "Record type '{}' is invalid",
-//                         record
-//                     )));
-//                 }
-//                 update_data.record = match record.as_str() {
-//                     "Qr" => Record::Qr,
-//                     "Barcode" => Record::Barcode,
-//                     "Nothing" => Record::Nothing,
-//                     _ => panic!("Record type validation was failed"),
-//                 };
-//             }
-//             "color" => {
-//                 let color = field.text().await?;
-//                 println!("color: {}", color);
-//                 //Colorに不正な値が入っている場合の早期リターン
-//                 if color != "Red"
-//                     && color != "Orange"
-//                     && color != "Brown"
-//                     && color != "SkyBlue"
-//                     && color != "Blue"
-//                     && color != "Green"
-//                     && color != "Yellow"
-//                     && color != "Purple"
-//                     && color != "Pink"
-//                 {
-//                     return Err(AppError(anyhow::anyhow!(
-//                         "Color type '{}' is invalid",
-//                         color
-//                     )));
-//                 }
-//                 update_data.color = match color.as_str() {
-//                     "Red" => Color::Red,
-//                     "Orange" => Color::Orange,
-//                     "Brown" => Color::Brown,
-//                     "SkyBlue" => Color::SkyBlue,
-//                     "Blue" => Color::Blue,
-//                     "Green" => Color::Green,
-//                     "Yellow" => Color::Yellow,
-//                     "Purple" => Color::Purple,
-//                     "Pink" => Color::Pink,
-//                     _ => panic!("Color type validation was failed"),
-//                 };
-//             }
-//             "description" => {
-//                 let description = field.text().await?;
-//                 println!("description: {}", description);
-//                 update_data.description = description;
-//             }
-//             "year_purchased" => {
-//                 let year_purchased = field.text().await?;
-//                 println!("year_purchased: {}", year_purchased);
-//                 if year_purchased.is_empty() {
-//                     update_data.year_purchased = None;
-//                 } else {
-//                     update_data.year_purchased = Some(year_purchased.parse::<i32>()?);
-//                 }
-//             }
-//             _ => {
-//                 println!("other");
-//                 have_invalid_field_name_flag = true;
-//             }
-//         }
-//     }
-//     //存在しないfieldを取得した場合の早期リターン
-//     if have_invalid_field_name_flag {
-//         return Err(AppError(anyhow::anyhow!("Invalid field name")));
-//     }
-//     //connectorをupdate_dataに格納
-//     update_data.connector = json!(result_connector_vec);
-//     //木構造に整合性の乱れがないかチェック
-//     //0. visible_idが変更されているかどうかの確認
-//     //更新対象の物品が存在するか確認するflag
-//     let mut is_exist_update_item_flag = false;
-//     let current_update_item_state = Item::find_by_id(id).one(&db).await?;
-//     match &current_update_item_state {
-//         Some(current_update_item_state) => {
-//             //1. visible_idが重複していないかチェック
-//             if current_update_item_state.visible_id != update_data.visible_id {
-//                 //物品ID: 変更
-//                 is_changed_visible_id_flag = true;
-//                 //visible_idが変更されている場合の被りがないかのチェック
-//                 let all_items = Item::find().all(&db).await?;
-//                 for item in all_items {
-//                     if update_data.visible_id == item.visible_id {
-//                         return Err(AppError(anyhow::anyhow!(
-//                             "The visible id ({}) is already used",
-//                             item.visible_id
-//                         )));
-//                     }
-//                 }
-//             }
-//         }
-//         None => is_exist_update_item_flag = true,
-//     }
-//     //更新対象の物品が存在しない場合の早期リターン
-//     if is_exist_update_item_flag {
-//         return Err(AppError(anyhow::anyhow!("Item not found")));
-//     }
-//     //3. 物品IDが物品IDを子孫に持つ全ての物品IDの子要素になっていないかのチェックをする
-//     //親物品IDのチェックをする
-//     //3.1. 親物品IDが変更されているかどうかの確認
-//     match &current_update_item_state {
-//         Some(current_update_item_state) => {
-//             //ここで 3.1. のチェック
-//             if current_update_item_state.parent_visible_id != update_data.parent_visible_id {
-//                 //親物品ID: 変更
-//                 is_chaged_parennt_visible_id_flag = true;
-//                 //3.2. 物品IDが物品IDを子孫に持つ全ての物品IDの子要素になっていないかのチェックをする
-//                 let mut descendants_items_vec: Vec<String> = Vec::new();
-//                 let mut count = 0;
-//                 let mut descendants_items: Vec<Model> = Vec::new();
-//                 let mut new_children_items: Vec<Model> = Vec::new();
-//                 let mut new_descendants_items: Vec<Model> = Vec::new();
-//                 loop {
-//                     if count == 0 {
-//                         let children_items = Item::find()
-//                             .filter(
-//                                 item::Column::ParentVisibleId
-//                                     .eq(&current_update_item_state.visible_id),
-//                             )
-//                             .all(&db)
-//                             .await?;
-//                         descendants_items = Item::find()
-//                             .filter(
-//                                 item::Column::GrandParentVisibleId
-//                                     .eq(&current_update_item_state.visible_id),
-//                             )
-//                             .all(&db)
-//                             .await?;
-//                         for children_item in children_items {
-//                             descendants_items_vec.push(children_item.visible_id);
-//                         }
-//                         for descendant_item in descendants_items.clone() {
-//                             descendants_items_vec.push(descendant_item.visible_id);
-//                         }
-//                         count += 1;
-//                     } else if count == 1 {
-//                         for item in descendants_items.clone() {
-//                             new_children_items = Item::find()
-//                                 .filter(item::Column::ParentVisibleId.eq(&item.visible_id))
-//                                 .all(&db)
-//                                 .await?;
-//                             new_descendants_items = Item::find()
-//                                 .filter(item::Column::GrandParentVisibleId.eq(&item.visible_id))
-//                                 .all(&db)
-//                                 .await?;
-//                             for new_children_item in new_children_items.clone() {
-//                                 descendants_items_vec.push(new_children_item.visible_id);
-//                             }
-//                             for new_descendant_item in new_descendants_items.clone() {
-//                                 descendants_items_vec.push(new_descendant_item.visible_id);
-//                             }
-//                         }
-//                         descendants_items = new_descendants_items.clone();
-//                         if new_children_items.is_empty() || new_descendants_items.is_empty() {
-//                             break;
-//                         }
-//                     } else {
-//                         break;
-//                     }
-//                 }
-//                 for descendants_item in descendants_items_vec {
-//                     if descendants_item == update_data.parent_visible_id {
-//                         return Err(AppError(anyhow::anyhow!(
-//                             "The visible id ({}) is a descendant of the one of the descendant visible id ({})",
-//                             update_data.visible_id,
-//                             current_update_item_state.visible_id
-//                         )));
-//                     }
-//                 }
-//             }
-//         }
-//         None => is_exist_update_item_flag = true,
-//     }
-//     //更新対象の物品が存在しない場合の早期リターン
-//     if is_exist_update_item_flag {
-//         return Err(AppError(anyhow::anyhow!("Item not found")));
-//     }
-//     //parent_id, grand_parent_idの取得
-//     match Item::find()
-//         .filter(item::Column::VisibleId.eq(&update_data.parent_visible_id))
-//         .one(&db)
-//         .await?
-//     {
-//         Some(item) => {
-//             update_data.parent_id = item.id;
-//             update_data.grand_parent_id = item.parent_id;
-//             match Item::find()
-//                 .filter(item::Column::Id.eq(item.parent_id))
-//                 .one(&db)
-//                 .await?
-//             {
-//                 Some(item) => {
-//                     update_data.grand_parent_visible_id = item.visible_id;
-//                 }
-//                 None => is_exist_update_item_flag = true,
-//             }
-//         }
-//         None => is_exist_update_item_flag = true,
-//     };
-//     //DBにデータの更新を反映する
-//     println!("Validation Passed!");
-//     //対象物品の更新
-//     match current_update_item_state.clone() {
-//         Some(item) => {
-//             let mut item: ActiveModel = item.into();
-//             item.visible_id = Set(update_data.visible_id.clone());
-//             item.parent_id = Set(update_data.parent_id);
-//             item.parent_visible_id = Set(update_data.parent_visible_id.clone());
-//             item.grand_parent_id = Set(update_data.grand_parent_id);
-//             item.grand_parent_visible_id = Set(update_data.grand_parent_visible_id.clone());
-//             item.name = Set(update_data.name.clone());
-//             item.product_number = Set(update_data.product_number.clone());
-//             item.record = Set(update_data.record.clone());
-//             item.color = Set(update_data.color.clone());
-//             item.description = Set(update_data.description.clone());
-//             item.year_purchased = Set(update_data.year_purchased);
-//             item.connector = Set(update_data.connector.clone());
-//             item.updated_at = Set(Utc::now().naive_local());
-//             item.update(&db).await?;
-//         }
-//         None => is_exist_update_item_flag = true,
-//     }
-//     //更新対象の物品が存在しない場合の早期リターン
-//     if is_exist_update_item_flag {
-//         return Err(AppError(anyhow::anyhow!("Item not found")));
-//     }
-//     //子孫物品の更新
-//     //物品ID: 変更
-//     if let Some(current_update_item_state) = current_update_item_state {
-//         if is_changed_visible_id_flag {
-//             let children_items = Item::find()
-//                 .filter(item::Column::ParentVisibleId.eq(&current_update_item_state.visible_id))
-//                 .all(&db)
-//                 .await?;
-//             let descendants_items = Item::find()
-//                 .filter(
-//                     item::Column::GrandParentVisibleId.eq(&current_update_item_state.visible_id),
-//                 )
-//                 .all(&db)
-//                 .await?;
-//             for child_item in children_items {
-//                 let mut child_item: ActiveModel = child_item.into();
-//                 child_item.parent_visible_id = Set(update_data.visible_id.clone());
-//                 child_item.update(&db).await?;
-//             }
-//             for descendant_item in descendants_items {
-//                 let mut descendant_item: ActiveModel = descendant_item.into();
-//                 descendant_item.grand_parent_visible_id = Set(update_data.visible_id.clone());
-//                 descendant_item.update(&db).await?;
-//             }
-//         }
-//         //親物品ID: 変更
-//         if is_chaged_parennt_visible_id_flag {
-//             let children_items = Item::find()
-//                 .filter(item::Column::ParentVisibleId.eq(&current_update_item_state.visible_id))
-//                 .all(&db)
-//                 .await?;
-//             for child_item in children_items {
-//                 let mut child_item: ActiveModel = child_item.into();
-//                 child_item.grand_parent_visible_id = Set(update_data.parent_visible_id.clone());
-//                 child_item.update(&db).await?;
-//             }
-//         }
-//     }
-//     let updated_item = Item::find_by_id(id).one(&db).await?;
-//     match updated_item {
-//         Some(item) => {
-//             let item = server::MeiliSearchItemData {
-//                 id: item.id,
-//                 visible_id: item.visible_id,
-//                 parent_id: item.parent_id,
-//                 parent_visible_id: item.parent_visible_id,
-//                 grand_parent_id: item.grand_parent_id,
-//                 grand_parent_visible_id: item.grand_parent_visible_id,
-//                 name: item.name,
-//                 product_number: item.product_number,
-//                 photo_url: item.photo_url,
-//                 record: item.record,
-//                 color: item.color,
-//                 description: item.description,
-//                 year_purchased: item.year_purchased,
-//                 connector: item.connector,
-//                 created_at: item.created_at,
-//                 updated_at: item.updated_at,
-//             };
-//             //meiliSearchにデータを更新する
-//             let update_item_vec: Vec<MeiliSearchItemData> = vec![item.clone()];
-//             let client = server::connect_meilisearch().await;
-//             let item_meilisearch = client
-//                 .index("item")
-//                 .add_documents(&update_item_vec, Some("id"))
-//                 .await?;
-//             println!("MeiliSearch Result");
-//             println!("{:?}", item_meilisearch);
-//             Ok(Json(item))
-//         }
-//         None => Err(AppError(anyhow::anyhow!("Item not found"))),
-//     }
-// }
 
-// pub async fn delete_item_delete(
-//     Path(id): Path<i32>,
-//     Extension(db): Extension<DatabaseConnection>,
-// ) -> Result<Json<server::MeiliSearchItemData>, AppError> {
-//     let delete_item = Item::find_by_id(id).one(&db).await?;
-//     //削除対象のノードがあるか確認
-//     match delete_item {
-//         Some(delete_item) => {
-//             //最上位のノードの場合
-//             if delete_item.parent_id == id {
-//                 return Err(AppError(anyhow::anyhow!("Can't delete top item")));
-//             }
-//             let children_items = Item::find()
-//                 .filter(item::Column::ParentId.eq(id))
-//                 .all(&db)
-//                 .await?;
-//             //最下層のノードの場合
-//             if children_items.is_empty() {
-//                 Item::delete_by_id(id).exec(&db).await?;
-//                 let delete_item: server::MeiliSearchItemData = delete_item.into();
-//                 return Ok(Json(delete_item));
-//             }
-//             if let Some(parent_item) = Item::find_by_id(delete_item.parent_id).one(&db).await? {
-//                 for child_item in children_items {
-//                     let mut child_item: item::ActiveModel = child_item.into();
-//                     child_item.parent_id = Set(parent_item.id);
-//                     child_item.parent_visible_id = Set(parent_item.visible_id.to_owned());
-//                     child_item.grand_parent_id = Set(parent_item.parent_id);
-//                     child_item.grand_parent_visible_id =
-//                         Set(parent_item.parent_visible_id.to_owned());
-//                     child_item.update(&db).await?;
-//                 }
-//             }
-//             let delete_item: server::MeiliSearchItemData = delete_item.into();
-//             Ok(Json(delete_item))
-//         }
-//         None => Err(AppError(anyhow::anyhow!("Item not found"))),
-//     }
-// }
-
+//* register *//
+#[axum::debug_handler]
+#[utoipa::path(
+    post,
+    path = "/api/item/register",
+    request_body(content = ControlItemData, description = "set update item data"),
+    responses(
+        (status = 201, description = "Created", body = ItemData),
+    ),
+    tag = "Item",
+)]
 pub async fn register_item_post(
     Extension(db): Extension<DatabaseConnection>,
-    mut multipart: Multipart,
-) -> Result<(), AppError> {
-    //parent_visible_idに変更があるかを確認するためのflag
-    let mut is_chaged_parennt_visible_id_flag = false;
-    //存在しないfield_nameがないか確認するためのflag
-    let mut have_invalid_field_name_flag = false;
-    //connectorのvector
-    let mut result_connector_vec: Vec<String> = Vec::new();
-    let mut update_data = server::ControlItemData {
-        visible_id: "".to_string(),
-        parent_visible_id: "".to_string(),
-        name: "".to_string(),
-        product_number: "".to_string(),
-        record: Record::Qr,
-        description: "".to_string(),
-        year_purchased: None,
-        connector: json!(result_connector_vec),
+    Extension(graph): Extension<Graph>,
+    Extension(meilisearch_client): Extension<Client>,
+    Extension(r2_url): Extension<String>,
+    Json(register_data): Json<server::ControlItemData>,
+) -> Result<Json<server::ItemData>, AppError> {
+    // //validate_flag
+    // let mut validate_flag = server::ControlItemFieldCountFlags::initialize();
+    // //connectorのvector
+    // let mut result_connector_vec: Vec<String> = Vec::new();
+    // let mut register_data = server::ControlItemData {
+    //     visible_id: "".to_string(),
+    //     parent_visible_id: "".to_string(),
+    //     name: "".to_string(),
+    //     product_number: "".to_string(),
+    //     record: Record::Qr,
+    //     description: "".to_string(),
+    //     year_purchased: None,
+    //     connector: result_connector_vec.clone(),
+    // };
+    // while let Some(field) = multipart.next_field().await? {
+    //     let field_name = field.name().unwrap().to_string();
+    //     println!("field name: {}", field_name);
+    //     //connector
+    //     if field_name.starts_with("connector") {
+    //         let connector = field.text().await?;
+    //         println!("connector: {}", connector);
+    //         result_connector_vec.push(connector);
+    //         continue;
+    //     }
+    //     match field_name.as_str() {
+    //         "visible_id" => {
+    //             let visible_id = field.text().await?;
+    //             println!("visible_id: {}", visible_id);
+    //             validate_flag.increment_visible_id(&visible_id);
+    //             register_data.visible_id = visible_id;
+    //         }
+    //         "parent_visible_id" => {
+    //             let parent_visible_id = field.text().await?;
+    //             println!("parent_visible_id: {}", parent_visible_id);
+    //             validate_flag.increment_parent_visible_id(&parent_visible_id);
+    //             register_data.parent_visible_id = parent_visible_id;
+    //         }
+    //         "name" => {
+    //             let name = field.text().await?;
+    //             println!("name: {}", name);
+    //             validate_flag.increment_name(&name);
+    //             register_data.name = name;
+    //         }
+    //         "product_number" => {
+    //             let product_number = field.text().await?;
+    //             println!("product_number: {}", product_number);
+    //             validate_flag.increment_product_number();
+    //             register_data.product_number = product_number;
+    //         }
+    //         "record" => {
+    //             let record = field.text().await?;
+    //             println!("record: {}", record);
+    //             //Recordに不正な値が入っている場合の早期リターン
+    //             validate_flag.increment_record(&record);
+    //             register_data.record = match record.as_str() {
+    //                 "Qr" => Record::Qr,
+    //                 "Barcode" => Record::Barcode,
+    //                 "Nothing" => Record::Nothing,
+    //                 _ => panic!("Record type validation was failed"),
+    //             };
+    //         }
+    //         "description" => {
+    //             let description = field.text().await?;
+    //             println!("description: {}", description);
+    //             validate_flag.increment_description();
+    //             register_data.description = description;
+    //         }
+    //         "year_purchased" => {
+    //             let year_purchased = field.text().await?;
+    //             println!("year_purchased: {}", year_purchased);
+    //             validate_flag.increment_year_purchased();
+    //             if year_purchased.is_empty() {
+    //                 register_data.year_purchased = None;
+    //             } else {
+    //                 register_data.year_purchased = Some(year_purchased.parse::<i32>()?);
+    //             }
+    //         }
+    //         _ => {
+    //             println!("other");
+    //             validate_flag.increment_invalid_field_name();
+    //         }
+    //     }
+    // }
+    // //validate_check
+    // validate_flag.check_is_ok()?;
+    // //update connector
+    // register_data.connector = result_connector_vec;
+    ///////////////////////////////////////////////
+
+    //insert to RDB
+    let oneself_id = {
+        let item_model = item::ActiveModel {
+            visible_id: Set(register_data.visible_id.clone()),
+            name: Set(register_data.name),
+            product_number: Set(register_data.product_number),
+            photo_url: Set(format!("{}/{}.webp", r2_url, Uuid::new_v4())),
+            record: Set(register_data.record),
+            description: Set(register_data.description),
+            year_purchased: Set(register_data.year_purchased),
+            connector: Set(json!(register_data.connector)),
+            created_at: Set(Utc::now().naive_local()),
+            updated_at: Set(Utc::now().naive_local()),
+            ..Default::default()
+        };
+        let _ = Item::insert(item_model).exec(&db).await?;
+        let item_model: item::Model = Item::find()
+            .filter(item::Column::VisibleId.eq(register_data.visible_id))
+            .one(&db)
+            .await?
+            .ok_or(AppError(anyhow::anyhow!("Item was not found.")))?;
+        let oneself_id = item_model.id;
+        let mut item_active_model: item::ActiveModel = item_model.into();
+        item_active_model.photo_url = Set(format!("{}/{}.webp", r2_url, oneself_id));
+        item_active_model.update(&db).await?;
+        oneself_id
     };
-    while let Some(field) = multipart.next_field().await? {
-        let field_name = field.name().unwrap().to_string();
-        println!("field name: {}", field_name);
-        //connector
-        if field_name.starts_with("connector") {
-            let connector = field.text().await?;
-            println!("connector: {}", connector);
-            result_connector_vec.push(connector);
-            continue;
-        }
-        match field_name.as_str() {
-            "visible_id" => {
-                let visible_id = field.text().await?;
-                println!("visible_id: {}", visible_id);
-                //とりあえず格納する
-                update_data.visible_id = visible_id;
-            }
-            "parent_visible_id" => {
-                let parent_id = field.text().await?;
-                println!("parent_visible_id: {}", parent_id);
-                //とりあえず格納する
-                update_data.parent_visible_id = parent_id;
-            }
-            "name" => {
-                let name = field.text().await?;
-                println!("name: {}", name);
-                update_data.name = name;
-            }
-            "product_number" => {
-                let product_number = field.text().await?;
-                println!("product_number: {}", product_number);
-                update_data.product_number = product_number;
-            }
-            "record" => {
-                let record = field.text().await?;
-                println!("record: {}", record);
-                //Recordに不正な値が入っている場合の早期リターン
-                if record != "Qr" && record != "Barcode" && record != "Nothing" {
-                    return Err(AppError(anyhow::anyhow!(
-                        "Record type '{}' is invalid",
-                        record
-                    )));
-                }
-                update_data.record = match record.as_str() {
-                    "Qr" => Record::Qr,
-                    "Barcode" => Record::Barcode,
-                    "Nothing" => Record::Nothing,
-                    _ => panic!("Record type validation was failed"),
-                };
-            }
-            "description" => {
-                let description = field.text().await?;
-                println!("description: {}", description);
-                update_data.description = description;
-            }
-            "year_purchased" => {
-                let year_purchased = field.text().await?;
-                println!("year_purchased: {}", year_purchased);
-                if year_purchased.is_empty() {
-                    update_data.year_purchased = None;
-                } else {
-                    update_data.year_purchased = Some(year_purchased.parse::<i32>()?);
-                }
-            }
-            _ => {
-                println!("other");
-                have_invalid_field_name_flag = true;
-            }
-        }
-    }
-    //存在しないfieldを取得した場合の早期リターン
-    if have_invalid_field_name_flag {
-        return Err(AppError(anyhow::anyhow!("Invalid field name")));
-    }
-    //parent_visible_idの存在と物品IDとして利用されているかのバリデーション
-    let parent_label_model = Label::find()
-        .filter(label::Column::VisibleId.eq(&update_data.parent_visible_id))
-        .one(&db)
-        .await?
-        .ok_or(AppError(anyhow::anyhow!(
-            "Parent label model was not found"
-        )))?;
-    let parent_item = Item::find()
-        .filter(item::Column::LabelId.eq(parent_label_model.id))
-        .one(&db)
-        .await?
-        .ok_or(AppError(anyhow::anyhow!("Parent item was not found")))?;
 
-    Ok(())
+    //insert to Neo4j
+    {
+        let parent_id = Item::find()
+            .filter(item::Column::VisibleId.eq(register_data.parent_visible_id))
+            .one(&db)
+            .await?
+            .ok_or(AppError(anyhow::anyhow!("Item was not found.")))?
+            .id;
+        let is_parent_exist = server::is_item_exits(&graph, parent_id.into()).await?;
+        if !is_parent_exist {
+            return Err(AppError(anyhow::anyhow!("Parent item was not found.")));
+        }
+        server::create_single_item(&graph, oneself_id.into()).await?;
+        server::connect_items(&graph, parent_id.into(), oneself_id.into()).await?;
+    }
+
+    //insert to MeiliSearch
+    {
+        let item_model: item::Model = Item::find_by_id(oneself_id)
+            .one(&db)
+            .await?
+            .ok_or(AppError(anyhow::anyhow!("Item was not found.")))?;
+        let label_model: label::Model = Label::find()
+            .filter(label::Column::VisibleId.eq(item_model.visible_id.clone()))
+            .one(&db)
+            .await?
+            .ok_or(AppError(anyhow::anyhow!("Label was not found.")))?;
+        let meilisearch_data = server::MeiliSearchItemData {
+            id: item_model.id,
+            visible_id: item_model.visible_id,
+            name: item_model.name,
+            product_number: item_model.product_number,
+            photo_url: item_model.photo_url,
+            record: item_model.record,
+            color: label_model.color,
+            description: item_model.description,
+            year_purchased: item_model.year_purchased,
+            connector: serde_json::from_value(item_model.connector)?,
+            created_at: item_model.created_at.to_string(),
+            updated_at: item_model.updated_at.to_string(),
+        };
+        let _ = meilisearch_client
+            .index("item")
+            .add_documents(&[meilisearch_data], Some("id"))
+            .await
+            .unwrap();
+    }
+    //return
+    //更新後のitem_modelを返す
+    let item_data = get_item_data(oneself_id, db, graph).await?;
+    Ok(item_data)
 }
-// pub async fn register_item_post(
-//     Extension(db): Extension<DatabaseConnection>,
-//     Extension(r2_url): Extension<String>,
-//     mut multipart: Multipart,
-// ) -> Result<Json<MeiliSearchItemData>, AppError> {
-//     println!("Register Item");
-//     //存在しないfield_nameがないか確認するためのflag
-//     let mut have_invalid_field_name_flag = false;
-//     //connectorのvector
-//     let mut result_connector_vec: Vec<String> = Vec::new();
-//     //DBに突っ込むデータ
-//     let mut register_data = server::ControlItemData {
-//         visible_id: "".to_string(),
-//         parent_id: 0,
-//         parent_visible_id: "".to_string(),
-//         grand_parent_id: 0,
-//         grand_parent_visible_id: "".to_string(),
-//         name: "".to_string(),
-//         product_number: "".to_string(),
-//         record: Record::Qr,
-//         color: Color::Red,
-//         description: "".to_string(),
-//         year_purchased: None,
-//         connector: json!(result_connector_vec),
-//     };
-//     while let Some(field) = multipart.next_field().await? {
-//         let field_name = field.name().unwrap().to_string();
-//         println!("field name: {}", field_name);
-//         //connector
-//         if field_name.starts_with("connector") {
-//             let connector = field.text().await?;
-//             println!("connector: {}", connector);
-//             result_connector_vec.push(connector);
-//             continue;
-//         }
-//         match field_name.as_str() {
-//             "visible_id" => {
-//                 let visible_id = field.text().await?;
-//                 println!("visible_id: {}", visible_id);
-//                 //とりあえず格納する
-//                 register_data.visible_id = visible_id;
-//             }
-//             "parent_visible_id" => {
-//                 let parent_id = field.text().await?;
-//                 println!("parent_visible_id: {}", parent_id);
-//                 //とりあえず格納する
-//                 register_data.parent_visible_id = parent_id;
-//             }
-//             "name" => {
-//                 let name = field.text().await?;
-//                 println!("name: {}", name);
-//                 register_data.name = name;
-//             }
-//             "product_number" => {
-//                 let product_number = field.text().await?;
-//                 println!("product_number: {}", product_number);
-//                 register_data.product_number = product_number;
-//             }
-//             "record" => {
-//                 let record = field.text().await?;
-//                 println!("record: {}", record);
-//                 //Recordに不正な値が入っている場合の早期リターン
-//                 if record != "Qr" && record != "Barcode" && record != "Nothing" {
-//                     return Err(AppError(anyhow::anyhow!(
-//                         "Record type '{}' is invalid",
-//                         record
-//                     )));
-//                 }
-//                 register_data.record = match record.as_str() {
-//                     "Qr" => Record::Qr,
-//                     "Barcode" => Record::Barcode,
-//                     "Nothing" => Record::Nothing,
-//                     _ => panic!("Record type validation was failed"),
-//                 };
-//             }
-//             "color" => {
-//                 let color = field.text().await?;
-//                 println!("color: {}", color);
-//                 //Colorに不正な値が入っている場合の早期リターン
-//                 if color != "Red"
-//                     && color != "Orange"
-//                     && color != "Brown"
-//                     && color != "SkyBlue"
-//                     && color != "Blue"
-//                     && color != "Green"
-//                     && color != "Yellow"
-//                     && color != "Purple"
-//                     && color != "Pink"
-//                 {
-//                     return Err(AppError(anyhow::anyhow!(
-//                         "Color type '{}' is invalid",
-//                         color
-//                     )));
-//                 }
-//                 register_data.color = match color.as_str() {
-//                     "Red" => Color::Red,
-//                     "Orange" => Color::Orange,
-//                     "Brown" => Color::Brown,
-//                     "SkyBlue" => Color::SkyBlue,
-//                     "Blue" => Color::Blue,
-//                     "Green" => Color::Green,
-//                     "Yellow" => Color::Yellow,
-//                     "Purple" => Color::Purple,
-//                     "Pink" => Color::Pink,
-//                     _ => panic!("Color type validation was failed"),
-//                 };
-//             }
-//             "description" => {
-//                 let description = field.text().await?;
-//                 println!("description: {}", description);
-//                 register_data.description = description;
-//             }
-//             "year_purchased" => {
-//                 let year_purchased = field.text().await?;
-//                 println!("year_purchased: {}", year_purchased);
-//                 if year_purchased.is_empty() {
-//                     register_data.year_purchased = None;
-//                 } else {
-//                     register_data.year_purchased = Some(year_purchased.parse::<i32>()?);
-//                 }
-//             }
-//             _ => {
-//                 println!("other");
-//                 have_invalid_field_name_flag = true;
-//             }
-//         }
-//     }
 
-//     //存在しないfieldを取得した場合の早期リターン
-//     if have_invalid_field_name_flag {
-//         return Err(AppError(anyhow::anyhow!("Invalid field name")));
-//     }
-//     //connectorをregister_dataに格納
-//     register_data.connector = json!(result_connector_vec);
-//     let all_items = Item::find().all(&db).await?;
-//     //物品IDが重複していないかのチェック
-//     let mut is_exist_parent_item_flag = 0;
-//     for item in &all_items {
-//         if register_data.visible_id == item.visible_id {
-//             return Err(AppError(anyhow::anyhow!(
-//                 "The visible id ({}) is already used",
-//                 item.visible_id
-//             )));
-//         }
-//         if register_data.parent_visible_id == item.visible_id {
-//             is_exist_parent_item_flag += 1;
-//         }
-//     }
-//     //親物品IDが存在するかどうかのチェック
-//     if is_exist_parent_item_flag != 1 {
-//         return Err(AppError(anyhow::anyhow!(
-//             "The parent visible id ({}) is not found",
-//             &register_data.parent_visible_id
-//         )));
-//     }
-//     //parent_id, grand_parent_idの取得
-//     //更新対象の物品が存在するか確認するflag
-//     let mut is_exist_parent_item_flag = false;
-//     match Item::find()
-//         .filter(item::Column::VisibleId.eq(&register_data.parent_visible_id))
-//         .one(&db)
-//         .await?
-//     {
-//         Some(item) => {
-//             register_data.parent_id = item.id;
-//             register_data.grand_parent_id = item.parent_id;
-//             match Item::find()
-//                 .filter(item::Column::Id.eq(item.parent_id))
-//                 .one(&db)
-//                 .await?
-//             {
-//                 Some(item) => {
-//                     register_data.grand_parent_visible_id = item.visible_id;
-//                 }
-//                 None => is_exist_parent_item_flag = true,
-//             }
-//         }
-//         None => is_exist_parent_item_flag = true,
-//     };
-//     //更新対象の物品が存在しない場合の早期リターン
-//     if is_exist_parent_item_flag {
-//         return Err(AppError(anyhow::anyhow!("Parent item not found")));
-//     }
-//     //DBにデータを登録する
-//     let item_model = item::ActiveModel {
-//         visible_id: Set(register_data.visible_id.clone()),
-//         parent_id: Set(register_data.parent_id),
-//         parent_visible_id: Set(register_data.parent_visible_id.clone()),
-//         grand_parent_id: Set(register_data.grand_parent_id),
-//         grand_parent_visible_id: Set(register_data.grand_parent_visible_id.clone()),
-//         name: Set(register_data.name.clone()),
-//         product_number: Set(register_data.product_number.clone()),
-//         photo_url: Set("".to_string()),
-//         record: Set(register_data.record.clone()),
-//         color: Set(register_data.color.clone()),
-//         description: Set(register_data.description.clone()),
-//         year_purchased: Set(register_data.year_purchased),
-//         connector: Set(register_data.connector.clone()),
-//         created_at: Set(Utc::now().naive_local()),
-//         updated_at: Set(Utc::now().naive_local()),
-//         ..Default::default()
-//     };
-//     Item::insert(item_model).exec(&db).await?;
-//     //DBに登録したデータを取得する
-//     let register_item = Item::find()
-//         .filter(item::Column::VisibleId.eq(&register_data.visible_id))
-//         .one(&db)
-//         .await?;
-//     if let Some(item_model) = register_item {
-//         let mut item: ActiveModel = item_model.clone().into();
-//         item.photo_url = Set(format!("{}/{}.webp", r2_url, item_model.id));
-//         item.update(&db).await?;
-//     } else {
-//         return Err(AppError(anyhow::anyhow!("Item not found")));
-//     }
-//     let register_item = Item::find()
-//         .filter(item::Column::VisibleId.eq(&register_data.visible_id))
-//         .one(&db)
-//         .await?;
-//     if let Some(item_model) = register_item {
-//         let item = server::MeiliSearchItemData {
-//             id: item_model.id,
-//             visible_id: item_model.visible_id,
-//             parent_id: item_model.parent_id,
-//             parent_visible_id: item_model.parent_visible_id,
-//             grand_parent_id: item_model.grand_parent_id,
-//             grand_parent_visible_id: item_model.grand_parent_visible_id,
-//             name: item_model.name,
-//             product_number: item_model.product_number,
-//             photo_url: item_model.photo_url,
-//             record: item_model.record,
-//             color: item_model.color,
-//             description: item_model.description,
-//             year_purchased: item_model.year_purchased,
-//             connector: item_model.connector,
-//             created_at: item_model.created_at,
-//             updated_at: item_model.updated_at,
-//         };
-//         let register_item_vec: Vec<MeiliSearchItemData> = vec![item.clone()];
-//         let client = server::connect_meilisearch().await;
-//         let item_meilisearch = client
-//             .index("item")
-//             .add_documents(&register_item_vec, Some("id"))
-//             .await?;
-//         println!("MeiliSearch Result");
-//         println!("{:?}", item_meilisearch);
-//         Ok(Json(item))
-//     } else {
-//         Err(AppError(anyhow::anyhow!("Item not found")))
-//     }
-// }
+//* delete *//
+#[axum::debug_handler]
+#[utoipa::path(
+    delete,
+    path = "/api/item/delete/{id}",
+    params(("id", Path, description = "set update item id")),
+    responses(
+        (status = 200, description = "OK", body = DeleteItemData),
+    ),
+    tag = "Item",
+)]
+pub async fn delete_item_delete(
+    Path(id): Path<i32>,
+    Extension(db): Extension<DatabaseConnection>,
+    Extension(graph): Extension<Graph>,
+    Extension(meilisearch_client): Extension<Client>,
+) -> Result<Json<server::DeleteItemData>, AppError> {
+    //neo4j
+    {
+        let parent_id_struxt = server::search_parent_id(&db, &graph, id.into()).await?;
+        let actual_parent_id = parent_id_struxt.actual_parent_id;
+        let is_actual_root = parent_id_struxt.is_actual_root;
+        if is_actual_root {
+            return Err(AppError(anyhow::anyhow!("Root Item cannot remove.")));
+        }
+        let children_ids = server::search_children_ids(&graph, id.into()).await?;
+        for child_id in children_ids {
+            server::connect_items(&graph, actual_parent_id, child_id).await?;
+        }
+        server::delete_item(&graph, id.into()).await?;
+    }
+    //RDB
+    {
+        let _ = Item::delete_by_id(id).exec(&db).await?;
+    }
+    //meilisearch
+    {
+        let _ = meilisearch_client
+            .index("item")
+            .delete_document(id)
+            .await
+            .unwrap();
+    }
+    Ok(server::DeleteItemData::generate())
+}
+
+//* validate　visible　id *//
+#[axum::debug_handler]
+#[utoipa::path(
+    post,
+    path = "/api/item/generate/visible-id/{number}",
+    params(("number", Path, description = "set generate item id amount")),
+    responses(
+        (status = 200, description = "OK", body = Vec<label::Model>),
+    ),
+    tag = "Item",
+)]
+pub async fn generate_visible_ids_post(
+    Path(number): Path<i32>, //生成するvisible_idの個数
+    Extension(db): Extension<DatabaseConnection>,
+) -> Result<Json<Vec<label::Model>>, AppError> {
+    let visivle_id_hashset = Label::find()
+        .all(&db)
+        .await?
+        .into_iter()
+        .map(|label| label.visible_id)
+        .collect::<HashSet<String>>();
+    let mut new_visible_id: String;
+    let mut label_vec: Vec<label::Model> = Vec::new();
+    for _ in 0..number {
+        let color_index: usize = rand::random::<usize>() % Color::COLOR_PALETTE.len();
+        new_visible_id = {
+            let mut rng = rand::thread_rng();
+            loop {
+                let new_id = (0..5)
+                    .map(|_| rng.sample(Alphanumeric).to_ascii_uppercase() as char)
+                    .collect();
+                if !visivle_id_hashset.contains(&new_id) {
+                    break new_id;
+                }
+            }
+        };
+        label_vec.push(label::Model {
+            visible_id: new_visible_id.clone(),
+            color: Color::COLOR_PALETTE[color_index].clone(),
+        });
+        let label_model = label::ActiveModel {
+            visible_id: Set(new_visible_id),
+            color: Set(Color::COLOR_PALETTE[color_index].clone()),
+        };
+        let _ = Label::insert(label_model).exec(&db).await?;
+    }
+    Ok(Json(label_vec))
+}
+
+//* generate csv *//
+#[axum::debug_handler]
+#[utoipa::path(
+    get,
+    path = "/api/item/get/csv-data",
+    responses(
+        (status = 200, description = "OK", body = Vec<CsvItemData>),
+    ),
+    tag = "Item",
+)]
+pub async fn generate_csv_get(
+    Extension(db): Extension<DatabaseConnection>,
+    Extension(graph): Extension<Graph>,
+) -> Result<Json<Vec<server::CsvItemData>>, AppError> {
+    let mut csv_data_vec: Vec<server::CsvItemData> = Vec::new();
+    let all_ids = server::get_all_ids(&db, &graph).await?;
+    for ids in all_ids {
+        let actual_root_id = ids.actual_route_id;
+        let descendants_items = ids.descendants;
+        let actual_root_item = Item::find_by_id(actual_root_id)
+            .one(&db)
+            .await?
+            .ok_or(AppError(anyhow::anyhow!("Actual root item was not found.")))?;
+        for descendant in descendants_items {
+            let item = Item::find_by_id(descendant)
+                .one(&db)
+                .await?
+                .ok_or(AppError(anyhow::anyhow!("Item was not found.")))?;
+            let csv_data: server::CsvItemData = server::CsvItemData {
+                product_number: item.product_number,
+                name: item.name,
+                place: actual_root_item.name.clone(),
+                note: item.description,
+            };
+            csv_data_vec.push(csv_data);
+        }
+    }
+    Ok(Json(csv_data_vec))
+}

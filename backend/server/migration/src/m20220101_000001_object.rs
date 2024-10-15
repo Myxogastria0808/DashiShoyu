@@ -27,7 +27,6 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(Object::MimeType).string().not_null())
                     .col(ColumnDef::new(Object::License).string().not_null())
-                    .col(ColumnDef::new(Object::Tag).json().not_null())
                     .col(ColumnDef::new(Object::Description).string().not_null())
                     .col(ColumnDef::new(Object::CreatedAt).timestamp().not_null())
                     .col(ColumnDef::new(Object::UpdatedAt).timestamp().not_null())
@@ -44,14 +43,13 @@ impl MigrationTrait for Migration {
 }
 
 #[derive(DeriveIden)]
-enum Object {
+pub enum Object {
     Table,
     Id,
     Name,
     PhotoUrl,
     MimeType,
     License,
-    Tag,
     Description,
     CreatedAt,
     UpdatedAt,
