@@ -34,10 +34,10 @@ pub async fn health_check_get(
     //Graph DB
     let _ = server::search_path(&graph, 1).await?;
     //Meilisearch
-    let _ = meilisearch_client
+    let _: Vec<server::MeiliSearchItemData> = meilisearch_client
         .index("item")
         .search()
-        .with_query("つくば市")
+        .with_query("ROOT")
         .execute()
         .await?
         .hits
