@@ -1,5 +1,5 @@
 use ::entity::{
-    item::{self, Entity as Item, Record},
+    item::{self, Entity as Item},
     label::{self, Color, Entity as Label},
 };
 use axum::{
