@@ -13,16 +13,14 @@ import * as fs from "fs";
 dotenv.config();
 
 const dotenvCaster = new DotEnvCaster();
-const endpoint: string = dotenvCaster.castString(
-  process.env.CLOUDFLARE_URI_ENDPOINT
-);
+const endpoint: string = dotenvCaster.castString(process.env.R2_URI_ENDPOINT);
 const accessKeyId: string = dotenvCaster.castString(
-  process.env.API_TOKENS_ACCESS_KEY_ID
+  process.env.R2_API_TOKENS_ACCESS_KEY_ID
 );
 const secretAccessKey: string = dotenvCaster.castString(
-  process.env.API_TOKENS_SECRET_ACCESS_KEY
+  process.env.R2_API_TOKENS_SECRET_ACCESS_KEY
 );
-const bucket: string = dotenvCaster.castString(process.env.BUCKET_NAME);
+const bucket: string = dotenvCaster.castString(process.env.R2_BUCKET_NAME);
 
 //r2のインスタンスを作成
 const s3: S3Client = new S3Client({
@@ -51,15 +49,13 @@ const uploadImage = async (
   );
 };
 
-const deleteImage = async (
-  file_name: string
-): Promise<void> => {
+const deleteImage = async (file_name: string): Promise<void> => {
   await s3.send(
     new DeleteObjectCommand({
       Bucket: bucket,
       Key: file_name,
     })
-  )
+  );
 };
 
 const getImage = async (file_name: string): Promise<fs.WriteStream> => {

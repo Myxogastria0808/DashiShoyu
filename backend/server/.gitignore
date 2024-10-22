@@ -1,7 +1,7 @@
 /target
 /migration/target
-/meili_data
-/db
+/meilisearch
+/postgres
 /neo4j
 .env
 /src/bin/data

@@ -13,7 +13,6 @@ in pkgs.mkShell {
     #backend
     sea-orm-cli
     cargo-watch
-    jq
     httpie
     #docker
     docker

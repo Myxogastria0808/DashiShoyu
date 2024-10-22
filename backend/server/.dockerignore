@@ -2,3 +2,13 @@ db
 meili_data
 neo4j
 target
+.env
+.env.example
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.yaml
+rust-toolchain.toml
+clean-up.sh
+init.sh
+server.sh

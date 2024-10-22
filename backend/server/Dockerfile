@@ -1,13 +1,13 @@
-FROM rust:1.81.0
+ARG APP_NAME=server
 
-WORKDIR /usr/src/dashishoyu
-COPY . .
+FROM rust:1.81.0 AS builder
+ARG APP_NAME
 
-RUN apt -y update \
-    && apt install -y jq \
-    && cargo install sea-orm-cli \
-    && chmod 777 init.sh
+WORKDIR /app
+COPY . /app
 
-CMD ["bash", "cargo", "run", "--bin", "server"]
+RUN cargo build --release --bin $APP_NAME
 
-ENTRYPOINT ["/usr/src/dashishoyu/init.sh"]
+EXPOSE 5000
+
+ENTRYPOINT ["/app/target/release/server"]

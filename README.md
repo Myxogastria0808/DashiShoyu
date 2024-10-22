@@ -6,7 +6,7 @@
 
 - Framework: Next.js 14
 - CSS: css modules
-- HTTP Client: ky
+- HTTP Client: fetch
 - QR: next-qrcode
 - Barcode: react-jsbarcode
 - PDF: react-pdf
@@ -54,32 +54,7 @@ nix-shell
 
 3. .env の作成
 
-`server/.env` を作成
-
-`ADMIN_API_KEY` は、 5. で取得したものを値として使用するため、この時点では空白
-
-```server/.env
-POSTGRES_USER=
-POSTGRES_PASSWORD=
-POSTGRES_DB=
-POSTGRES_PORT=
-MASTER_KEY=
-MEILI_ENV=
-MEILI_PORT=
-
-MEILI_URL=
-ADMIN_API_KEY=
-
-DATABASE_URL=
-API_URL=
-
-BUCKET_NAME=
-CLOUDFLARE_URI_ENDPOINT=
-API_TOKENS_ACCESS_KEY_ID=
-API_TOKENS_SECRET_ACCESS_KEY=
-R2_URL=
-
-```
+`backend/server/.env` を作成
 
 4. docker の起動
 
@@ -88,36 +63,10 @@ R2_URL=
 docker-compose up -d
 ```
 
-5. Default Admin API Key を取得
-
-`<MASTER_KEY>`を設定した `MASTER_KEY` に変える
-
-`<MEILI_URL>`を設定した `MEILI_URL` に変える
+5. 初期データの投入等
 
 ```sh
-curl   -X GET '<MEILI_URL>'   -H 'Authorization: Bearer <MASTER_KEY>' | jq
-```
-
-コマンドの例
-
-```sh
-curl   -X GET 'http://localhost:7700/keys'   -H 'Authorization: Bearer master-key' | jq
-```
-
-上記のコマンドを実行すると、Default Admin API Key を含む結果が返ってくる
-
-`server/.env`の`ADMIN_API_KEY`の値として、Default Admin API Key の値を書く
-
-6. migrate する
-
-```sh
-DATABASE_URL="<DATABASE_URL>" sea-orm-cli migrate refresh
-```
-
-コマンドの例
-
-```sh
-DATABASE_URL="postgres://username:password@localhost:5432/db_name" sea-orm-cli migrate refresh
+bash init.sh
 ```
 
 ## エンティティを生成する
@@ -132,13 +81,13 @@ docker-compose up -d
 1. マイグレーションをする
 
 ```sh
-DATABASE_URL="<DATABASE_URL>" sea-orm-cli migrate refresh
+cargo run --manifest-path ./migration/Cargo.toml -- refresh -u postgres://<POSTGRES_USER>:<POSTGRES_PASSWORD>@localhost:<POSTGRES_PORT>/<POSTGRES_DB>
 ```
 
 コマンドの例
 
-```sh
-DATABASE_URL="postgres://username:password@localhost:5432/db_name" sea-orm-cli migrate refresh
+````sh
+cargo run --manifest-path ./migration/Cargo.toml -- refresh -u postgres://username:password@localhost:5432/db_name
 ```
 
 2. エンティティを生成する
@@ -149,7 +98,7 @@ rm entity
 sea-orm-cli generate entity \
     -u <DATABASE_URL> \
     -o entity/src
-```
+````
 
 コマンドの例
 
@@ -171,18 +120,10 @@ docker exec -it postgrs psql -U <POSTGRES_USER> -d <POSTGRES_DB>
 docker exec -it postgrs psql -U username -d db_name
 ```
 
-## 初期データを入れる
-
-1. `server/src/bin/data/`に csv データを入れる
-
-2. `server/src/bin/data/in/`に jpg ファイルを入れる
-
-3. 以下のコマンドで実行
-
-`sample.csv` というファイル名の場合は、以下のようになる
+## server 環境の破壊
 
 ```sh
-cargo run --bin init ./src/bin/data/sample.csv
+bash clean-up.sh
 ```
 
 ## DashiShoyu の ER 図

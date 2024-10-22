@@ -8,30 +8,29 @@ use tokio::{fs::File, io::AsyncReadExt};
 pub async fn connect_r2() -> R2Manager {
     // Set environment variables
     // Declaration and initialization of static variable
-    static BUCKET_NAME: OnceCell<String> = OnceCell::new();
-    static CLOUDFLARE_URI_ENDPOINT: OnceCell<String> = OnceCell::new();
-    static API_TOKENS_ACCESS_KEY_ID: OnceCell<String> = OnceCell::new();
-    static API_TOKENS_SECRET_ACCESS_KEY: OnceCell<String> = OnceCell::new();
+    static R2_BUCKET_NAME: OnceCell<String> = OnceCell::new();
+    static R2_URI_ENDPOINT: OnceCell<String> = OnceCell::new();
+    static R2_API_TOKENS_ACCESS_KEY_ID: OnceCell<String> = OnceCell::new();
+    static R2_API_TOKENS_SECRET_ACCESS_KEY: OnceCell<String> = OnceCell::new();
     // load .env file
     dotenv().expect(".env file not found.");
     // set Object value
-    let _ = BUCKET_NAME.set(env::var("BUCKET_NAME").expect("KEY not found in .env file."));
-    let _ = CLOUDFLARE_URI_ENDPOINT
-        .set(env::var("CLOUDFLARE_URI_ENDPOINT").expect("KEY not found in .env file."));
-    let _ = API_TOKENS_ACCESS_KEY_ID
-        .set(env::var("API_TOKENS_ACCESS_KEY_ID").expect("KEY not found in .env file."));
-    let _ = API_TOKENS_SECRET_ACCESS_KEY
-        .set(env::var("API_TOKENS_SECRET_ACCESS_KEY").expect("KEY not found in .env file."));
+    let _ = R2_BUCKET_NAME.set(env::var("R2_BUCKET_NAME").expect("KEY not found in .env file."));
+    let _ = R2_URI_ENDPOINT.set(env::var("R2_URI_ENDPOINT").expect("KEY not found in .env file."));
+    let _ = R2_API_TOKENS_ACCESS_KEY_ID
+        .set(env::var("R2_API_TOKENS_ACCESS_KEY_ID").expect("KEY not found in .env file."));
+    let _ = R2_API_TOKENS_SECRET_ACCESS_KEY
+        .set(env::var("R2_API_TOKENS_SECRET_ACCESS_KEY").expect("KEY not found in .env file."));
     //インスタンスの作成
     R2Manager::new(
         //Bucket Name
-        BUCKET_NAME.get().unwrap(),
+        R2_BUCKET_NAME.get().unwrap(),
         //Cloudflare URI endpoint
-        CLOUDFLARE_URI_ENDPOINT.get().unwrap(),
+        R2_URI_ENDPOINT.get().unwrap(),
         //API Token's Access Key ID
-        API_TOKENS_ACCESS_KEY_ID.get().unwrap(),
+        R2_API_TOKENS_ACCESS_KEY_ID.get().unwrap(),
         //API Token's Secret Access Key
-        API_TOKENS_SECRET_ACCESS_KEY.get().unwrap(),
+        R2_API_TOKENS_SECRET_ACCESS_KEY.get().unwrap(),
     )
     .await
 }

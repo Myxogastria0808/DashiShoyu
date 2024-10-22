@@ -1,5 +1,5 @@
 use crate::routes::index;
-use axum::{extract::DefaultBodyLimit, http::Method, Extension, Router};
+use axum::{extract::DefaultBodyLimit, http::Method, routing::get, Extension, Router};
 use cloudflare_r2_rs::r2;
 use dotenvy::dotenv;
 use once_cell::sync::OnceCell;
@@ -27,10 +27,6 @@ async fn api() -> Result<(), DbErr> {
     let r2_url: String = server::get_r2_url().await;
     // MeiliSearch
     let meilisearch_client: meilisearch_sdk::client::Client = server::connect_meilisearch().await;
-    // requwest
-    //let reqwest_client: reqwest::Client = reqwest::Client::new();
-    //meilisearch_admin_api_key
-    let meilisearch_admin_api_key: String = server::get_meilisearch_admin_api_key().await;
     //meilisearch_url
     let meilisearch_url: String = server::get_meilisearch_url().await;
     //connect neo4j
@@ -39,35 +35,39 @@ async fn api() -> Result<(), DbErr> {
     let cors: CorsLayer = CorsLayer::new()
         .allow_methods([Method::POST, Method::GET, Method::DELETE, Method::PUT])
         .allow_origin(Any);
+    //port
+    // dotenv().expect(".env file not found.");
+    // static SERVER_PORT: OnceCell<String> = OnceCell::new();
+    // let _ = SERVER_PORT.set(env::var("SERVER_PORT").expect("KEY not found in .env file."));
     //Router
     let app = Router::new()
+        .route("/", get(top_handler))
         .merge(index::root_routes().await)
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .layer(Extension(db))
         .layer(Extension(r2_manager))
         .layer(Extension(r2_url))
         .layer(Extension(meilisearch_client))
-        .layer(Extension(meilisearch_admin_api_key))
         .layer(Extension(meilisearch_url))
         .layer(Extension(graph))
         .layer(cors)
         .layer(DefaultBodyLimit::max(1024 * 1024 * 100));
     //Server
-    dotenv().expect(".env file not found.");
-    static API_URL: OnceCell<String> = OnceCell::new();
-    let _ = API_URL.set(env::var("API_URL").expect("KEY not found in .env file."));
-    let listener = tokio::net::TcpListener::bind(API_URL.get().expect("Failed to get API_URL"))
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:5000").await.unwrap();
     println!("listening on http://{}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.unwrap();
     Ok(())
 }
 
+//*ハンドラ関数 */
+async fn top_handler() -> String {
+    "Hello, World!".to_string()
+}
+
 #[derive(OpenApi)]
 #[openapi(
     info(title = "DashiShoyu"),
-    servers((url = "http://localhost:3000")),
+    servers((url = "http://0.0.0.0:5000")),
     tags(
         (name = "Health Check", description = "Health Checkのエンドポイント"),
         (name = "Item", description = "物品に関係するエンドポイント"),

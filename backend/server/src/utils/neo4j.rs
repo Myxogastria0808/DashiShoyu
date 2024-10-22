@@ -10,18 +10,23 @@ use crate::AppError;
 pub async fn connect_neo4j() -> Graph {
     // Set environment variables
     // Declaration and initialization of static variable
-    static NEO4J_BOLT_URL: OnceCell<String> = OnceCell::new();
+    static NEO4J_BOLT_PORT: OnceCell<String> = OnceCell::new();
     static NEO4J_USER: OnceCell<String> = OnceCell::new();
     static NEO4J_PASSWORD: OnceCell<String> = OnceCell::new();
     // load .env file
     dotenv().expect(".env file not found.");
     // set Object value
-    let _ = NEO4J_BOLT_URL.set(env::var("NEO4J_BOLT_URL").expect("KEY not found in .env file."));
+    let _ = NEO4J_BOLT_PORT.set(env::var("NEO4J_BOLT_PORT").expect("KEY not found in .env file."));
     let _ = NEO4J_USER.set(env::var("NEO4J_USER").expect("KEY not found in .env file."));
     let _ = NEO4J_PASSWORD.set(env::var("NEO4J_PASSWORD").expect("KEY not found in .env file."));
     //インスタンスの作成
     Graph::new(
-        NEO4J_BOLT_URL.get().expect("Failed to get NEO4J_BOLT_URL"),
+        format!(
+            "localhost:{}",
+            NEO4J_BOLT_PORT
+                .get()
+                .expect("Failed to get NEO4J_BOLT_PORT")
+        ),
         NEO4J_USER.get().expect("Failed to get NEO4J_USER"),
         NEO4J_PASSWORD.get().expect("Failed to get NEO4J_PASSWORD"),
     )
