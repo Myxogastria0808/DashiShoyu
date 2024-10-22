@@ -6,7 +6,9 @@ ARG APP_NAME
 WORKDIR /app
 COPY . /app
 
-RUN cargo build --release --bin $APP_NAME
+RUN touch /app/.env \
+    && chmod +x /app/.env \
+    && cargo build --release --bin $APP_NAME
 
 EXPOSE 5000
 

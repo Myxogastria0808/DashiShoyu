@@ -21,7 +21,8 @@ pub async fn connect_db() -> Result<DatabaseConnection, DbErr> {
     let _ = POSTGRES_DB.set(env::var("POSTGRES_DB").expect("POSTGRES_DB not found in .env file."));
     // connnect database
     Database::connect(format!(
-        "postgres://{}:{}@localhost:{}/{}",
+        "postgres://{}:{}@postgres:{}/{}",
+        // "postgres://{}:{}@localhost:{}/{}",
         POSTGRES_USER.get().expect("Failed to get POSTGRES_USER"),
         POSTGRES_PASSWORD
             .get()

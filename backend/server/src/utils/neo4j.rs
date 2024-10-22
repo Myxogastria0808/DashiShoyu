@@ -22,7 +22,8 @@ pub async fn connect_neo4j() -> Graph {
     //インスタンスの作成
     Graph::new(
         format!(
-            "localhost:{}",
+            "neo4j:{}",
+            // "localhost:{}",
             NEO4J_BOLT_PORT
                 .get()
                 .expect("Failed to get NEO4J_BOLT_PORT")

@@ -17,7 +17,8 @@ pub async fn connect_meilisearch() -> Client {
     //インスタンスの作成
     Client::new(
         format!(
-            "http://localhost:{}",
+            "http://meilisearch:{}",
+            // "http://localhost:{}",
             MEILI_PORT.get().expect("Failed to get MEILI_PORT")
         ),
         Some(
@@ -34,7 +35,8 @@ pub async fn get_meilisearch_url() -> String {
     dotenv().expect(".env file not found.");
     let _ = MEILI_PORT.set(env::var("MEILI_PORT").expect("KEY not found in .env file."));
     format!(
-        "http://localhost:{}",
+        "http://meilisearch:{}",
+        // "http://localhost:{}",
         MEILI_PORT.get().expect("Failed to get MEILI_PORT")
     )
 }

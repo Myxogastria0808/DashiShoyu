@@ -36,12 +36,12 @@ async fn api() -> Result<(), DbErr> {
         .allow_methods([Method::POST, Method::GET, Method::DELETE, Method::PUT])
         .allow_origin(Any);
     //port
-    // dotenv().expect(".env file not found.");
-    // static SERVER_PORT: OnceCell<String> = OnceCell::new();
-    // let _ = SERVER_PORT.set(env::var("SERVER_PORT").expect("KEY not found in .env file."));
+    dotenv().expect(".env file not found.");
+    static SERVER_PORT: OnceCell<String> = OnceCell::new();
+    let _ = SERVER_PORT.set(env::var("SERVER_PORT").expect("KEY not found in .env file."));
     //Router
     let app = Router::new()
-        .route("/", get(top_handler))
+        .route("/", get(ping))
         .merge(index::root_routes().await)
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .layer(Extension(db))
@@ -59,9 +59,9 @@ async fn api() -> Result<(), DbErr> {
     Ok(())
 }
 
-//*ハンドラ関数 */
-async fn top_handler() -> String {
-    "Hello, World!".to_string()
+//* dummy *//
+async fn ping() -> String {
+    "pong!".to_string()
 }
 
 #[derive(OpenApi)]
