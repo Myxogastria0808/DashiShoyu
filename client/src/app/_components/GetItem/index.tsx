@@ -6,10 +6,6 @@ const GetItem = (props: { item: ItemDataType }) => {
     <>
       <p>Id: {props.item.id}</p>
       <p>VisibleId: {props.item.visible_id}</p>
-      <p>ParentId: {props.item.parent_id}</p>
-      <p>ParentVisibleId: {props.item.parent_visible_id}</p>
-      <p>GrandParentId: {props.item.grand_parent_id}</p>
-      <p>GrandParentVisibleId: {props.item.grand_parent_visible_id}</p>
       <p>Name: {props.item.name}</p>
       <p>ProductNumber: {props.item.product_number}</p>
       <Image

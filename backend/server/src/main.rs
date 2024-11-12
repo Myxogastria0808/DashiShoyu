@@ -1,10 +1,7 @@
 use crate::routes::index;
 use axum::{extract::DefaultBodyLimit, http::Method, routing::get, Extension, Router};
 use cloudflare_r2_rs::r2;
-use dotenvy::dotenv;
-use once_cell::sync::OnceCell;
 use sea_orm::{self, DatabaseConnection, DbErr};
-use std::env;
 use tower_http::cors::{Any, CorsLayer};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -35,10 +32,6 @@ async fn api() -> Result<(), DbErr> {
     let cors: CorsLayer = CorsLayer::new()
         .allow_methods([Method::POST, Method::GET, Method::DELETE, Method::PUT])
         .allow_origin(Any);
-    //port
-    dotenv().expect(".env file not found.");
-    static SERVER_PORT: OnceCell<String> = OnceCell::new();
-    let _ = SERVER_PORT.set(env::var("SERVER_PORT").expect("KEY not found in .env file."));
     //Router
     let app = Router::new()
         .route("/", get(ping))

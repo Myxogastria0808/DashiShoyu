@@ -3,7 +3,7 @@ services:
     container_name: postgres
     image: postgres:latest
     volumes:
-      - ./postgres:/var/lib/postgresql/data
+      - ./postgres:/var/lib/postgresql
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -48,6 +48,25 @@ services:
       timeout: 5s
       retries: 5
     tty: true
+  init:
+    container_name: init
+    image: init
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    build:
+      context: .
+      dockerfile: ./init.Dockerfile
+    env_file:
+      - .env
+    healthcheck:
+      test: set -o pipefail;curl -fsS http://localhost:7700/health | grep -q '{"status":"available"}'
+      timeout: 5s
+      retries: 5
   server:
     container_name: server
     image: server
@@ -58,11 +77,13 @@ services:
         condition: service_healthy
       meilisearch:
         condition: service_healthy
+      init:
+        condition: service_completed_successfully
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./server.Dockerfile
     env_file:
       - .env
     ports:
-      - "${SERVER_PORT}:5000"
+      - "5000:5000"
     tty: true

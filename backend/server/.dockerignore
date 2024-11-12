@@ -9,6 +9,4 @@ target
 Dockerfile
 docker-compose.yaml
 rust-toolchain.toml
-clean-up.sh
-init.sh
 server.sh

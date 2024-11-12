@@ -1,0 +1,12 @@
+services:
+  image-api:
+    container_name: image-api
+    image: image-api
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "7000:7000"
+    tty: true
