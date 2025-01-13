@@ -86,7 +86,7 @@ cargo run --manifest-path ./migration/Cargo.toml -- refresh -u postgres://<POSTG
 
 コマンドの例
 
-````sh
+```sh
 cargo run --manifest-path ./migration/Cargo.toml -- refresh -u postgres://username:password@localhost:5432/db_name
 ```
 
@@ -98,7 +98,7 @@ rm entity
 sea-orm-cli generate entity \
     -u <DATABASE_URL> \
     -o entity/src
-````
+```
 
 コマンドの例
 
